@@ -128,6 +128,8 @@
 
 #include "modulator.h"
 
+#include "rds.h"
+
 #include "utils.h"
 
 #include "fir_filters/FIR_Audio_Filter_Filter.h"
@@ -238,6 +240,7 @@ int main(int argc, char* argv[])
 	double audio_sample_final;
 	double audio_sample_r_car;
 	double pilot_sample;
+	double rds_sample,rds_mod_sample;
 	double balance_sample;
 	double fm_mod;
 
@@ -259,6 +262,9 @@ int main(int argc, char* argv[])
 
 	wave_gen audiow_stereo38KHz_gen;
 	wave_gen stereo_pilot_gen;
+	wave_gen rds_carrier_57KHz_gen;
+
+	rds_stat rdsstat;
 
 	uint16_t iq_wave_buf[ BUFFER_SAMPLES_SIZE * (IQ_SAMPLE_RATE/SUBCARRIERS_SAMPLE_RATE)];
 	int16_t  mod_wave_buf[(BUFFER_SAMPLES_SIZE*2)/4];
@@ -347,12 +353,12 @@ int main(int argc, char* argv[])
 		// Left and Right audio freq (used if no .mod music file)
 		audio_l_gen.phase = 0;
 		audio_l_gen.Frequency = 700;
-		audio_l_gen.Amplitude = 22.5;
+		audio_l_gen.Amplitude = 21.25;
 		audio_l_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
 
 		audio_r_gen.phase = 0;
 		audio_r_gen.Frequency = 1000;
-		audio_r_gen.Amplitude = 22.5;
+		audio_r_gen.Amplitude = 21.25;
 		audio_r_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
 
 		// Left <> Right balance LFO (used if no .mod music file)
@@ -372,6 +378,14 @@ int main(int argc, char* argv[])
 		audiow_stereo38KHz_gen.Frequency = 38000;
 		audiow_stereo38KHz_gen.Amplitude = 1;
 		audiow_stereo38KHz_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
+
+		// 57KHz RDS carrier
+		rds_carrier_57KHz_gen.phase = 0;
+		rds_carrier_57KHz_gen.Frequency = 57000;
+		rds_carrier_57KHz_gen.Amplitude = 1;
+		rds_carrier_57KHz_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
+
+		init_rds_encoder(&rdsstat,SUBCARRIERS_SAMPLE_RATE);
 
 		// IQ Modulator
 		iqgen.phase = 0;
@@ -456,14 +470,22 @@ int main(int argc, char* argv[])
 						FIR_Audio_Filter_Filter_put(&leftminusright_audio_filter, leftminusright_audio);
 						leftminusright_audio = FIR_Audio_Filter_Filter_get(&leftminusright_audio_filter);
 
-						// Keep the 18KHz pilot and the 38KHz clock in phase :
+						// Keep the 19KHz pilot and the 38KHz clock in phase :
 						audiow_stereo38KHz_gen.phase = (stereo_pilot_gen.phase * 2) + PI/2;
+
+						rds_carrier_57KHz_gen.phase = (stereo_pilot_gen.phase * 3) + PI/2;
+
+						rds_mod_sample = get_rds_bit_state(&rdsstat,stereo_pilot_gen.phase);
 
 						// 38KHz DSB-SC (Double-sideband suppressed-carrier) modulation
 						audio_sample_r_car = f_get_next_sample(&audiow_stereo38KHz_gen);      // Get the 38KHz carrier
 						audio_sample_r_car = (audio_sample_r_car * leftminusright_audio );    // And multiply it with the left - right sample.
 
-						// 18KHz pilot
+						// 57KHz DSB-SC (Double-sideband suppressed-carrier) modulation
+						rds_sample = f_get_next_sample(&rds_carrier_57KHz_gen);               // Get the 57KHz carrier
+						rds_sample = ( rds_sample * rds_mod_sample );                         // And multiply it with the rds sample.
+
+						// 19KHz pilot
 						pilot_sample = f_get_next_sample(&stereo_pilot_gen);
 					}
 					else
@@ -471,11 +493,12 @@ int main(int argc, char* argv[])
 						// Mono : No pilot nor 38KHz modulation...
 						audio_sample_r_car = 0;
 						pilot_sample = 0;
+						rds_sample = 0;
 					}
 
 					// Mix all signals sources :
-					//                             45%                  45%                 10%
-					audio_sample_final = ((leftplusright_audio) + audio_sample_r_car + pilot_sample);
+					//                             42.5%                  42.5%             10%           5%
+					audio_sample_final = ((leftplusright_audio) + audio_sample_r_car + pilot_sample + rds_sample);
 
 					// Main carrier frequency modulation : +/- 75KHz
 					fm_mod = ((audio_sample_final / (double)(100.0)) * (double)(75000));
@@ -485,7 +508,7 @@ int main(int argc, char* argv[])
 					//FM_Baseband_Filter_put(&fmband_filter, fm_mod );
 					//fm_mod = FM_Baseband_Filter_get(&fmband_filter);
 
-					subcarriers_dbg_wave_buf[j] = fm_mod;
+					subcarriers_dbg_wave_buf[j] = fm_mod/4;
 					subcarriers_float_wave_buf[j] = fm_mod;
 				}
 

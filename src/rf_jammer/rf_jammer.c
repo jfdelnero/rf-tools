@@ -256,7 +256,7 @@ int main(int argc, char* argv[])
 		audio_l_gen.Frequency = ((double)ping_pong_freq) / 100.0;
 		audio_l_gen.Amplitude = 100;
 		audio_l_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
-s
+
 		// IQ Modulator
 		iqgen.phase = 0;
 		iqgen.Frequency = IF_FREQ;

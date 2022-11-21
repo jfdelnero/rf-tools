@@ -24,14 +24,23 @@ endif
 ifeq ($(findstring CYGWIN,$(shell uname)),CYGWIN)
 endif
 
-EXEC=broadcast_fm
+EXEC=broadcast_fm rf_jammer
 
 all: $(EXEC)
 
-broadcast_fm:  broadcast_fm.o wave.o modulator.o FIR_Audio_Filter_Filter.o FM_Baseband_Filter.o AudioPreemphasis_Filter.o hxcmod.o rand_gen.o
+broadcast_fm:  broadcast_fm.o rds.o wave.o modulator.o FIR_Audio_Filter_Filter.o FM_Baseband_Filter.o AudioPreemphasis_Filter.o hxcmod.o rand_gen.o
+	$(CC) -o $@    $^ $(LDFLAGS)
+
+rf_jammer:  rf_jammer.o wave.o modulator.o rand_gen.o
 	$(CC) -o $@    $^ $(LDFLAGS)
 
 broadcast_fm.o: ../src/broadcast_fm/broadcast_fm.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+rf_jammer.o: ../src/rf_jammer/rf_jammer.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+rds.o: ../src/broadcast_fm/rds.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 utils.o: ../src/common/utils.c

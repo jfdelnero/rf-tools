@@ -226,6 +226,7 @@ void printhelp(char* argv[])
 	printf("Options:\n");
 	printf("  -stdout \t\t\t: IQ stream send to stdout\n");
 	printf("  -mono \t\t\t: Mono FM mode\n");
+	printf("  -no_rds \t\t\t: Disable RDS\n");
 	printf("  -mod_file:[MODFILE.MOD]\t: MOD music file to play\n");
 	printf("  -generate \t\t\t: Generate the IQ stream\n");
 	printf("  -help \t\t\t: This help\n\n");
@@ -281,10 +282,11 @@ int main(int argc, char* argv[])
 	int16_t  subcarriers_dbg_wave_buf[BUFFER_SAMPLES_SIZE];
 	double   subcarriers_float_wave_buf[BUFFER_SAMPLES_SIZE];
 
-	int monomode;
+	int monomode, no_rds;
 
 	stdoutmode = 0;
 	monomode = 0;
+	no_rds = 0;
 
 	if(isOption(argc,argv,"stdout",NULL)>0)
 	{
@@ -318,6 +320,11 @@ int main(int argc, char* argv[])
 		monomode = 1;
 	}
 
+	if(isOption(argc,argv,"no_rds",NULL)>0)
+	{
+		no_rds = 1;
+	}
+	
 	if(isOption(argc,argv,"generate",0)>0)
 	{
 		// Init the .mod player and load the mod file.
@@ -485,15 +492,23 @@ int main(int argc, char* argv[])
 
 						rds_carrier_57KHz_gen.phase = (stereo_pilot_gen.phase * 3) + PI/2;
 
-						rds_mod_sample = get_rds_bit_state(&rdsstat,stereo_pilot_gen.phase);
+						if(!no_rds)
+							rds_mod_sample = get_rds_bit_state(&rdsstat,stereo_pilot_gen.phase);
 
 						// 38KHz DSB-SC (Double-sideband suppressed-carrier) modulation
 						audio_sample_r_car = f_get_next_sample(&audiow_stereo38KHz_gen);      // Get the 38KHz carrier
 						audio_sample_r_car = (audio_sample_r_car * leftminusright_audio );    // And multiply it with the left - right sample.
 
-						// 57KHz DSB-SC (Double-sideband suppressed-carrier) modulation
-						rds_sample = f_get_next_sample(&rds_carrier_57KHz_gen);               // Get the 57KHz carrier
-						rds_sample = ( rds_sample * rds_mod_sample );                         // And multiply it with the rds sample.
+						if(!no_rds)
+						{
+							// 57KHz DSB-SC (Double-sideband suppressed-carrier) modulation
+							rds_sample = f_get_next_sample(&rds_carrier_57KHz_gen);               // Get the 57KHz carrier
+							rds_sample = ( rds_sample * rds_mod_sample );                         // And multiply it with the rds sample.
+						}
+						else
+						{
+							rds_sample = 0;
+						}
 
 						// 19KHz pilot
 						pilot_sample = f_get_next_sample(&stereo_pilot_gen);

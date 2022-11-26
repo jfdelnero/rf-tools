@@ -76,10 +76,10 @@ double f_get_next_sample(wave_gen * wg)
 
 	wg->phase += ( (2.0 * PI * wg->Frequency) / (double)wg->sample_rate );
 
-	if(wg->phase > (2.0 * PI) )
+	if(wg->phase >= (2.0 * PI) )
 		wg->phase -= (2.0 * PI);
 
-	if(wg->phase < (-2.0 * PI) )
+	if(wg->phase <= (-2.0 * PI) )
 		wg->phase += (2.0 * PI);
 
 	return sample;

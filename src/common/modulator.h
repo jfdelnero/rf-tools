@@ -30,7 +30,7 @@
 #if defined(M_PI)
 #define PI M_PI
 #else
-#define PI 3.1415926535897932384626433832795
+#define PI ((double)(3.1415926535897932384626433832795))
 #endif
 
 typedef struct iq_wave_gen_

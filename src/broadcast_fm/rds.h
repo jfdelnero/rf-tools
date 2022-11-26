@@ -40,6 +40,15 @@ typedef struct _rds_stat
 
 	int test;
 	int cycles_count;
+
+	char station_name[256+1];
+	int  station_name_index;
+
+	uint32_t current_bloc;
+	int current_bloc_index;
+
+	int current_rds_code_index;
+
 }rds_stat;
 
 void init_rds_encoder(rds_stat * stat,int sample_rate);

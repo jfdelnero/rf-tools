@@ -84,7 +84,7 @@
 //      ________            Stereo L - R modulation
 //     /        \                38KHz DSB-SC
 //    /          \           _______      _______
-//   /    MONO    \  Pilot  /       \    /       \      RDS
+//   /    MONO    \  Pilot  /       \    /       \     RDS (57KHz DSB-SC)
 //  /     L + R    \   |   /         \  /         \    _  _
 // /                \__|__/           \/           \__/ \/ \___
 //30Hz           15Khz |  |            |            |    |
@@ -144,11 +144,16 @@
 
 #include "fir_filters/FIR_Audio_Filter_Filter.h"
 #include "fir_filters/AudioPreemphasis_Filter.h"
+#include "fir_filters/FIR_RDS_Passband_Filter.h"
+
+#ifdef CONFIG_BASEBAND_FILTER
+#include "fir_filters/FM_Baseband_Filter.h"
+#endif
 
 #include "hxcmod/hxcmod.h"
 
-#define IQ_SAMPLE_RATE           2000000
-#define SUBCARRIERS_SAMPLE_RATE   200000
+#define IQ_SAMPLE_RATE            2000000
+#define SUBCARRIERS_SAMPLE_RATE    200000
 
 #define IF_FREQ                        0
 
@@ -227,6 +232,7 @@ void printhelp(char* argv[])
 	printf("  -stdout \t\t\t: IQ stream send to stdout\n");
 	printf("  -mono \t\t\t: Mono FM mode\n");
 	printf("  -no_rds \t\t\t: Disable RDS\n");
+	printf("  -silence \t\t\t: No sound\n");
 	printf("  -mod_file:[MODFILE.MOD]\t: MOD music file to play\n");
 	printf("  -generate \t\t\t: Generate the IQ stream\n");
 	printf("  -help \t\t\t: This help\n\n");
@@ -240,6 +246,7 @@ int main(int argc, char* argv[])
 
 	FILE *f;
 	char filename[512];
+	char rdstxt[512];
 
 	int mod_data_size = 0;
 	unsigned char * mod_data;
@@ -262,8 +269,10 @@ int main(int argc, char* argv[])
 
 	FIR_Audio_Filter_Filter leftplusright_audio_filter,leftminusright_audio_filter;
 	AudioPreemphasis_Filter preamphasis_left_filter,preamphasis_right_filter;
-	//FM_Baseband_Filter fmband_filter;
-
+	FIR_RDS_Passband_Filter rds_filter;
+#ifdef CONFIG_BASEBAND_FILTER
+	FM_Baseband_Filter fmband_filter;
+#endif
 	iq_wave_gen iqgen;
 
 	wave_gen audio_l_gen;
@@ -282,11 +291,12 @@ int main(int argc, char* argv[])
 	int16_t  subcarriers_dbg_wave_buf[BUFFER_SAMPLES_SIZE];
 	double   subcarriers_float_wave_buf[BUFFER_SAMPLES_SIZE];
 
-	int monomode, no_rds;
+	int monomode, no_rds, silence;
 
 	stdoutmode = 0;
 	monomode = 0;
 	no_rds = 0;
+	silence = 0;
 
 	if(isOption(argc,argv,"stdout",NULL)>0)
 	{
@@ -324,7 +334,12 @@ int main(int argc, char* argv[])
 	{
 		no_rds = 1;
 	}
-	
+
+	if(isOption(argc,argv,"silence",NULL)>0)
+	{
+		silence = 1;
+	}
+
 	if(isOption(argc,argv,"generate",0)>0)
 	{
 		// Init the .mod player and load the mod file.
@@ -362,8 +377,11 @@ int main(int argc, char* argv[])
 		AudioPreemphasis_Filter_init(&preamphasis_right_filter);
 		FIR_Audio_Filter_Filter_init(&leftplusright_audio_filter);
 		FIR_Audio_Filter_Filter_init(&leftminusright_audio_filter);
+		FIR_RDS_Passband_Filter_init(&rds_filter);
 
-		//FM_Baseband_Filter_init(&fmband_filter);
+#ifdef CONFIG_BASEBAND_FILTER
+		FM_Baseband_Filter_init(&fmband_filter);
+#endif
 
 		// Init oscillators
 
@@ -403,6 +421,10 @@ int main(int argc, char* argv[])
 		rds_carrier_57KHz_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
 
 		init_rds_encoder(&rdsstat,SUBCARRIERS_SAMPLE_RATE);
+		if(isOption(argc,argv,"rdstxt",(char*)&rdstxt)>0)
+		{
+			set_rds_text(&rdsstat,rdstxt);
+		}
 
 		// IQ Modulator
 		iqgen.phase = 0;
@@ -451,23 +473,39 @@ int main(int argc, char* argv[])
 						if(audio_r_gen.Amplitude < 0) audio_r_gen.Amplitude = 0;
 						if(audio_l_gen.Amplitude < 0) audio_l_gen.Amplitude = 0;
 
-						// Get the left and right samples.
-						audio_sample_l = f_get_next_sample(&audio_l_gen);
-						audio_sample_r = f_get_next_sample(&audio_r_gen);
+						if(!silence)
+						{
+							// Get the left and right samples.
+							audio_sample_l = f_get_next_sample(&audio_l_gen);
+							audio_sample_r = f_get_next_sample(&audio_r_gen);
+						}
+						else
+						{
+							audio_sample_l = 0;
+							audio_sample_r = 0;
+						}
 					}
 					else
 					{
-						if(!(j&3))
+						if(!silence)
 						{
-							audio_sample_l = ((double)((mod_wave_buf[((j/4)*2)]) / (double)32768)) * (double)22.5;
-							audio_sample_r = ((double)((mod_wave_buf[((j/4)*2)+1]) / (double)32768)) * (double)22.5;
+							if(!(j&3))
+							{
+								audio_sample_l = ((double)((mod_wave_buf[((j/4)*2)]) / (double)32768)) * (double)22.5;
+								audio_sample_r = ((double)((mod_wave_buf[((j/4)*2)+1]) / (double)32768)) * (double)22.5;
 
-							// Left & Right Preamphasis filter.
-							AudioPreemphasis_Filter_put(&preamphasis_left_filter, audio_sample_l );
-							audio_sample_l = AudioPreemphasis_Filter_get(&preamphasis_left_filter);
+								// Left & Right Preamphasis filter.
+								AudioPreemphasis_Filter_put(&preamphasis_left_filter, audio_sample_l );
+								audio_sample_l = AudioPreemphasis_Filter_get(&preamphasis_left_filter);
 
-							AudioPreemphasis_Filter_put(&preamphasis_right_filter, audio_sample_r );
-							audio_sample_r = AudioPreemphasis_Filter_get(&preamphasis_right_filter);
+								AudioPreemphasis_Filter_put(&preamphasis_right_filter, audio_sample_r );
+								audio_sample_r = AudioPreemphasis_Filter_get(&preamphasis_right_filter);
+							}
+						}
+						else
+						{
+							audio_sample_l = 0;
+							audio_sample_r = 0;
 						}
 					}
 
@@ -504,6 +542,9 @@ int main(int argc, char* argv[])
 							// 57KHz DSB-SC (Double-sideband suppressed-carrier) modulation
 							rds_sample = f_get_next_sample(&rds_carrier_57KHz_gen);               // Get the 57KHz carrier
 							rds_sample = ( rds_sample * rds_mod_sample );                         // And multiply it with the rds sample.
+
+							FIR_RDS_Passband_Filter_put(&rds_filter, rds_sample );
+							rds_sample = FIR_RDS_Passband_Filter_get(&rds_filter);
 						}
 						else
 						{
@@ -547,7 +588,13 @@ int main(int argc, char* argv[])
 					{
 						old_freq += interpolation_step;
 
+#ifdef CONFIG_BASEBAND_FILTER
+						FM_Baseband_Filter_put(&fmband_filter, old_freq );
+						iqgen.Frequency = ((double)IF_FREQ + FM_Baseband_Filter_get(&fmband_filter));
+#else
 						iqgen.Frequency = ((double)IF_FREQ + old_freq);
+#endif
+
 						iq_wave_buf[(j*(IQ_SAMPLE_RATE/SUBCARRIERS_SAMPLE_RATE))+k] = get_next_iq(&iqgen);
 					}
 

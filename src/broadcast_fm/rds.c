@@ -59,6 +59,11 @@ void init_rds_encoder(rds_stat * stat,int sample_rate)
 	strcpy(stat->station_name,"- RDS - - RDS - - RDS - - RDS - --TEST----TEST----TEST----TEST----TEST----TEST--\n");
 }
 
+void set_rds_text(rds_stat * stat,char * text)
+{
+	strncpy(stat->station_name,text,256);
+}
+
 int rds_differential_encoder(rds_stat * stat)
 {
 	stat->current_diff_dat_state = ((stat->ser_data_in & 1) ^ stat->current_diff_dat_state);

@@ -53,3 +53,4 @@ typedef struct _rds_stat
 
 void init_rds_encoder(rds_stat * stat,int sample_rate);
 double get_rds_bit_state(rds_stat * stat, double pilot_phase);
+void set_rds_text(rds_stat * stat,char * text);

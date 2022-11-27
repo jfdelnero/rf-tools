@@ -28,7 +28,7 @@ EXEC=broadcast_fm rf_jammer
 
 all: $(EXEC)
 
-broadcast_fm:  broadcast_fm.o rds.o rds_stream_dump.o wave.o modulator.o FIR_Audio_Filter_Filter.o FM_Baseband_Filter.o AudioPreemphasis_Filter.o hxcmod.o rand_gen.o
+broadcast_fm:  broadcast_fm.o rds.o rds_stream_dump.o wave.o modulator.o FIR_Audio_Filter_Filter.o FM_Baseband_Filter.o AudioPreemphasis_Filter.o FIR_RDS_Passband_Filter.o hxcmod.o rand_gen.o
 	$(CC) -o $@    $^ $(LDFLAGS)
 
 rf_jammer:  rf_jammer.o wave.o modulator.o rand_gen.o
@@ -59,6 +59,9 @@ FIR_Audio_Filter_Filter.o: ../src/broadcast_fm/fir_filters/FIR_Audio_Filter_Filt
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 FM_Baseband_Filter.o: ../src/broadcast_fm/fir_filters/FM_Baseband_Filter.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+FIR_RDS_Passband_Filter.o: ../src/broadcast_fm/fir_filters/FIR_RDS_Passband_Filter.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 AudioPreemphasis_Filter.o: ../src/broadcast_fm/fir_filters/AudioPreemphasis_Filter.c

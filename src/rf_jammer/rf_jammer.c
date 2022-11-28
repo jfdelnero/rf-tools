@@ -134,7 +134,6 @@ void printhelp(char* argv[])
 }
 
 #define BUFFER_SAMPLES_SIZE (2048*8)
-#define PI 3.1415926535897932384626433832795
 
 int main(int argc, char* argv[])
 {

@@ -47,7 +47,7 @@
 #define printf(fmt...) do { \
 		if(!stdoutmode) \
 		fprintf(stdout, fmt); \
-    } while (0)
+	} while (0)
 
 #define IQ_SAMPLE_RATE           (10000000UL)
 
@@ -126,10 +126,11 @@ void printhelp(char* argv[])
 	printf("  -jam_mode:[Mode id]\t\t: Mode. 0=ping pong, 1=random, 2=fixed frequency, 3=full iq random\n");
 	printf("  -jam_interval:[uS]\t\t: Interval (uS)\n");
 	printf("  -jam_duration:[uS]\t\t: pulses duration (uS)\n");
-	printf("  -jam_long_interval:[uS]\t\t: pulses long interval (uS)\n");
-	printf("  -jam_group_pulses:[cnt]\t\t: pulses group count\n");
+	printf("  -jam_long_interval:[uS]\t: pulses long interval (uS)\n");
+	printf("  -jam_group_pulses:[cnt]\t: pulses group count\n");
 	printf("  -rand_interval\t\t: random interval mode\n");
 	printf("  -rand_duration\t\t: random duration mode\n");
+	printf("  -jam_total_duration:[uS]\t: total duration\n");
 	printf("  -generate\t\t\t: Generate the IQ stream\n");
 	printf("  -help\t\t\t\t: This help\n");
 	printf("\n  Examples :\n");
@@ -165,6 +166,7 @@ int main(int argc, char* argv[])
 	int pulses_long_interval,pulses_short_interval;
 	int pulses_duration, pulses_duration_cnt;
 	int pulses_group_nb;
+	int jam_total_duration,total_duration;
 
 	int rand_interval,rand_duration;
 
@@ -277,6 +279,12 @@ int main(int argc, char* argv[])
 		rand_duration = 1;
 	}
 
+	jam_total_duration = -1;
+	if(isOption(argc,argv,"jam_total_duration",(char*)&temp_str)>0)
+	{
+		jam_total_duration = us2ticks(iqgen.sample_rate, atoi(temp_str));
+	}
+
 	if(isOption(argc,argv,"generate",0)>0)
 	{
 		memset(iq_wavebuf, 0, BUFFER_SAMPLES_SIZE * sizeof(uint16_t) );
@@ -311,6 +319,8 @@ int main(int argc, char* argv[])
 
 		if(wave1)
 		{
+			total_duration = 0;
+
 			// Main loop...
 			for(i=0;(i<8) || stdoutmode ;i++)
 			{
@@ -394,6 +404,18 @@ int main(int argc, char* argv[])
 									pulses_duration = (rand_gen_get_next_word(&randgen) & 0x7F) * (iqgen.sample_rate / 1000000);
 							}
 						}
+
+						total_duration++;
+
+						if(jam_total_duration >= 0)
+						{
+							if(total_duration >= jam_total_duration)
+							{
+								i = 8;
+								stdoutmode = 0;
+								break;
+							}
+						}
 					}
 				}
 				else
@@ -446,12 +468,25 @@ int main(int argc, char* argv[])
 
 							}
 						}
+
+						total_duration++;
+
+						if(jam_total_duration >= 0)
+						{
+							if(total_duration >= jam_total_duration)
+							{
+								i = 8;
+								stdoutmode = 0;
+								break;
+							}
+						}
 					}
 				}
 
 				write_wave(wave1, &iq_wavebuf,BUFFER_SAMPLES_SIZE);
 				write_wave(wave2, &wavebuf_dbg,BUFFER_SAMPLES_SIZE);
 			}
+
 			close_wave(wave1);
 			close_wave(wave2);
 		}

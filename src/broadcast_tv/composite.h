@@ -43,6 +43,9 @@ typedef struct composite_state_
 	double g_yconv[256];
 	double b_yconv[256];
 
+	double uconv[256];
+	double vconv[256];
+
 }composite_state;
 
 typedef struct pulses_state_

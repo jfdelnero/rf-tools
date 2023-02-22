@@ -137,6 +137,9 @@ void init_composite(composite_state * state, int sample_rate, int x_res, int y_r
 		state->r_yconv[i] = (double)i * 0.299;
 		state->g_yconv[i] = (double)i * 0.587;
 		state->b_yconv[i] = (double)i * 0.114;
+
+		state->uconv[i]   = (double)i * 0.492;
+		state->vconv[i]   = (double)i * 0.877;
 	}
 
 	state->step_index = 0;
@@ -146,7 +149,7 @@ void init_composite(composite_state * state, int sample_rate, int x_res, int y_r
 void gen_video_signal(composite_state * state, double * vid_signal, int buf_size)
 {
 	int i,xpos;
-	double value,yvalue;
+	double value,yvalue,uvalue,vvalue;
 	uint32_t rgb_word;
 
 	value = 0;
@@ -201,6 +204,9 @@ void gen_video_signal(composite_state * state, double * vid_signal, int buf_size
 
 						// Y / Luminance
 						yvalue = state->r_yconv[rgb_word & 0xFF] + state->g_yconv[( rgb_word >> 8 )& 0xFF] + state->b_yconv[( rgb_word >> 16 )& 0xFF];
+						// UV
+						uvalue = (double)((( rgb_word >> 16 )& 0xFF) - yvalue)*0.492;
+						vvalue = (double)(( rgb_word & 0xFF) - yvalue)*0.877;
 
 						value += (double)( yvalue * ((double)((double)100.0 - vertical_blanking[state->step_index].end_val)/(double)256));
 					}

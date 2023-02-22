@@ -63,8 +63,9 @@ int bmp_load(char * file,bitmap_data * bdata)
 			ysize=bitmap_info_header.biHeight;
 			bitperpixel=bitmap_info_header.biBitCount;
 
-			if(!bitmap_info_header.biCompression)
+			if(!bitmap_info_header.biCompression || (bitmap_info_header.biCompression == BI_BITFIELDS) )
 			{
+				// TODO : Read and use the BI_BITFIELDS RGB masks.
 
 				// read palette
 				switch(bitperpixel)
@@ -85,6 +86,7 @@ int bmp_load(char * file,bitmap_data * bdata)
 						palettesize=0;
 					break;
 					default:
+						//printf("bmp_load : bitperpixel not supported : %d\n",bitperpixel);
 						palettesize=0;
 						//non supported
 					break;
@@ -271,6 +273,7 @@ int bmp_load(char * file,bitmap_data * bdata)
 			else
 			{
 				// non supported
+				//printf("bmp_load : Packed bmp not supported : %d\n",bitmap_info_header.biCompression);
 				fclose(f);
 				return -1;
 			}

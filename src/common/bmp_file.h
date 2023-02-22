@@ -1,5 +1,9 @@
 #pragma pack(1)
 
+#ifndef BI_BITFIELDS
+#define BI_BITFIELDS 3
+#endif
+
 typedef struct bitmap_data_
 {
 	int16_t xsize;

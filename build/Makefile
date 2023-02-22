@@ -24,14 +24,17 @@ endif
 ifeq ($(findstring CYGWIN,$(shell uname)),CYGWIN)
 endif
 
-EXEC=broadcast_fm rf_jammer
+EXEC=broadcast_tv broadcast_fm rf_jammer
 
 all: $(EXEC)
 
 broadcast_fm:  broadcast_fm.o rds.o rds_stream_dump.o wave.o modulator.o FIR_Audio_Filter_Filter.o FM_Baseband_Filter.o AudioPreemphasis_Filter.o FIR_RDS_Passband_Filter.o hxcmod.o rand_gen.o
 	$(CC) -o $@    $^ $(LDFLAGS)
 
-rf_jammer:  rf_jammer.o wave.o modulator.o rand_gen.o
+broadcast_tv:  broadcast_tv.o composite.o wave.o modulator.o bmp_file.o
+	$(CC) -o $@    $^ $(LDFLAGS)
+
+rf_jammer:  rf_jammer.o wave.o modulator.o rand_gen.o composite.o
 	$(CC) -o $@    $^ $(LDFLAGS)
 
 broadcast_fm.o: ../src/broadcast_fm/broadcast_fm.c
@@ -70,7 +73,16 @@ AudioPreemphasis_Filter.o: ../src/broadcast_fm/fir_filters/AudioPreemphasis_Filt
 hxcmod.o: ../src/common/hxcmod/hxcmod.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
+bmp_file.o: ../src/common/bmp_file.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
 rand_gen.o: ../src/common/rand_gen.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+composite.o: ../src/broadcast_tv/composite.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+broadcast_tv.o: ../src/broadcast_tv/broadcast_tv.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 clean:

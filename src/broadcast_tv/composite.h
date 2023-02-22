@@ -24,8 +24,6 @@
 // Change History (most recent first):
 ///////////////////////////////////////////////////////////////////////////////////
 
-#define COMPOSITE_LINE_PERIOD_US 64.0
-
 typedef struct composite_state_
 {
 	double sample_period;
@@ -35,6 +33,7 @@ typedef struct composite_state_
 
 	uint32_t * video_buffer;
 
+	int cur_line_index;
 	int step_index;
 	int repeat_cnt;
 
@@ -53,5 +52,5 @@ typedef struct pulses_state_
 }pulses_state;
 
 
-void init_composite(composite_state * state, int sample_rate, int x_res, int y_res);
+void init_composite(composite_state * state, int sample_rate, int x_res, int y_res, uint32_t * bmp);
 void gen_video_signal(composite_state * state, double * vid_signal, int buf_size);

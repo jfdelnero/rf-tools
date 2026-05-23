@@ -48,6 +48,18 @@ typedef struct wav_hdr_ //
 
 #pragma pack()
 
+#pragma pack(1)
+typedef struct sdrid_hdr_
+{
+	uint32_t sample_rate;      // S/s
+	uint64_t center_frequency; // Hz
+	uint64_t start_unix_epoch; // ms
+	uint32_t sample_size;      // 16 or 24 bits
+	uint32_t rfu;              // 0
+	uint32_t crc32;            //
+}sdrid_hdr;
+#pragma pack()
+
 typedef struct wave_io_
 {
 	FILE * file;
@@ -60,6 +72,7 @@ typedef struct wave_io_
 #define WAVE_FILE_FORMAT_WAV_8BITS_STEREO 1
 #define WAVE_FILE_FORMAT_WAV_16BITS_STEREO 2
 #define WAVE_FILE_FORMAT_WAV_16BITS_MONO 3
+#define WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ 5
 
 wave_io * create_wave(char * path,int samplerate,int type);
 void write_wave(wave_io * w_io, void * buffer, int nbsamples);

@@ -36,6 +36,8 @@
 
 #include <stdint.h>
 
+#include "std_crc32.h"
+
 #include "wave.h"
 
 #include "utils.h"
@@ -43,6 +45,7 @@
 wave_io * create_wave(char * path,int samplerate, int type)
 {
 	wav_hdr wavhdr;
+	sdrid_hdr sdridhdr;
 	wave_io * w_io;
 	int sample_byte_size;
 
@@ -62,6 +65,17 @@ wave_io * create_wave(char * path,int samplerate, int type)
 			w_io->type = type;
 			switch(w_io->type)
 			{
+
+				case WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ:
+					memset(&sdridhdr,0,sizeof(sdrid_hdr));
+					sdridhdr.sample_rate = samplerate;
+					sdridhdr.center_frequency = 466000000;
+					sdridhdr.sample_size = 16;
+					sdridhdr.crc32 = std_crc32(0, (void*)&sdridhdr, sizeof(sdrid_hdr) - sizeof(uint32_t));
+					fwrite((void*)&sdridhdr,sizeof(sdrid_hdr),1,w_io->file);
+					w_io->sample_byte_size = 2; // I + Q
+				break;
+
 				case WAVE_FILE_FORMAT_RAW_8BITS_IQ: // Raw / IQ
 					w_io->sample_byte_size = 2; // I + Q
 				break;
@@ -118,8 +132,22 @@ void write_wave(wave_io * w_io, void * buffer, int nbsamples)
 	{
 		if(!w_io->file)
 			return;
-		
-		fwrite(buffer,nbsamples * w_io->sample_byte_size,1, w_io->file);
+
+		if( w_io->type == WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ )
+		{
+			int8_t * src_smp;
+			int16_t tmpw;
+			src_smp = ((int8_t *)buffer);
+			for(int i=0;i<(nbsamples*2);i++)
+			{
+				tmpw = ((int16_t)((*src_smp++)));
+				fwrite(&tmpw,2,1, w_io->file);
+			}
+		}
+		else
+		{
+			fwrite(buffer,nbsamples * w_io->sample_byte_size,1, w_io->file);
+		}
 		w_io->total_nb_samples += nbsamples;
 	}
 }
@@ -135,6 +163,7 @@ void close_wave(wave_io * w_io)
 
 		switch(w_io->type)
 		{
+			case WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ:
 			case WAVE_FILE_FORMAT_RAW_8BITS_IQ: // Raw / IQ
 				fclose(w_io->file);
 			break;

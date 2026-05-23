@@ -28,3 +28,32 @@ void get_filename(char * path,char * filename);
 void printbuf(unsigned char * buf,int size);
 int is_printable_char(unsigned char c);
 
+
+#ifdef BIGENDIAN_HOST
+
+// big endian
+#define BIGENDIAN_WORD(wValue) (wValue)
+#define BIGENDIAN_DWORD(dwValue) (dwValue)
+
+// little endian
+
+#define LITTLEENDIAN_WORD(wValue) ( (((wValue&0xFF)<<8)) | (((wValue)>>8)&0xFF) )
+#define LITTLEENDIAN_DWORD(dwValue) ( (((dwValue&0xFF)<<24)) | (((dwValue&0xFF00)<<8)) | (((dwValue)>>8)&0xFF00) | (((dwValue)>>24)&0xFF) )
+
+#else
+
+//LITTLE ENDIAN HOST
+
+// big endian
+#define BIGENDIAN_WORD(wValue) ( (((wValue)<<8)&0xFF00) | (((wValue)>>8)&0xFF) )
+#define BIGENDIAN_DWORD(dwValue) ( (((dwValue&0xFF)<<24)) | (((dwValue&0xFF00)<<8)) | (((dwValue)>>8)&0xFF00) | (((dwValue)>>24)&0xFF) )
+
+// little endian
+
+#define LITTLEENDIAN_WORD(wValue) (wValue)
+#define LITTLEENDIAN_DWORD(dwValue) (dwValue)
+
+#endif
+
+extern const unsigned char LUT_ByteBitsInverter[];
+extern const unsigned char LUT_QuartetBitsInverter[];

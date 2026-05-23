@@ -684,6 +684,30 @@ int main(int argc, char* argv[])
 				i += BUFFER_IQ_SAMPLES_SIZE;
 			}
 
+			// Initial 750Hz tone
+			serial_init(&ser, 8, smprate, 750*2); // 750 Hz tone
+
+			i = 0;
+			while(i < (smprate/5)) // ~ 200 ms
+			{
+				for(j=0;j<BUFFER_IQ_SAMPLES_SIZE;j++)
+				{
+					if(serial_is_tx_reg_empty(&ser))
+					{
+						serial_tx_settxreg(&ser,0xAA);
+					}
+
+					iqgen.Frequency = ((double)CENTRAL_IF_FREQ + ( freqshift + ( (serial_tx_getlinestate(&ser) ) * ( -freqshift * 2 ) ) ) );
+
+					iq_wave_buf[j] = get_next_iq(&iqgen);
+				}
+
+				write_wave(wave1, &iq_wave_buf,BUFFER_IQ_SAMPLES_SIZE);
+				i += BUFFER_IQ_SAMPLES_SIZE;
+			}
+
+			serial_init(&ser, 8, smprate, baud);
+
 			// Main loop :  Generate the message
 			while( !pocctx.frm_end || !serial_is_tx_reg_empty(&ser) )
 			{

@@ -98,6 +98,8 @@
 #define IQ_SAMPLE_RATE            2000000
 #define CENTRAL_IF_FREQ           0
 
+//#define DEBUG 1
+
 #define BUFFER_IQ_SAMPLES_SIZE (1024*8)
 
 #define printf(fmt...) do { \
@@ -399,9 +401,9 @@ int set_numerical_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsig
 		batch[ba].words[w] = BIGENDIAN_DWORD( calc_pocsag_bch( word ) );
 	}
 
-	if( ( batch[ba].words[15] != POCSAG_IDLE_CW ) && ( batch[ba].words[14] != POCSAG_IDLE_CW ) )
+	if( ( batch[ba].words[15] != BIGENDIAN_DWORD( calc_pocsag_bch(POCSAG_IDLE_CW) ) ) )
 	{
-		return ba+1+1;
+		return ba+2;
 	}
 	else
 	{
@@ -503,9 +505,9 @@ int set_alphanum_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsign
 		batch[ba].words[w] = BIGENDIAN_DWORD( calc_pocsag_bch( word ) );
 	}
 
-	if( ( batch[ba].words[15] != POCSAG_IDLE_CW ) && ( batch[ba].words[14] != POCSAG_IDLE_CW ) )
+	if( ( batch[ba].words[15] != BIGENDIAN_DWORD( calc_pocsag_bch(POCSAG_IDLE_CW) ) ) )
 	{
-		return ba+1+1;
+		return ba+2;
 	}
 	else
 	{
@@ -530,6 +532,7 @@ int main(int argc, char* argv[])
 	int batchescnt;
 	int alpha;
 	int batchbruteforce;
+	int wavout;
 
 	wave_io * wave1;
 
@@ -597,6 +600,12 @@ int main(int argc, char* argv[])
 		batchbruteforce = 1;
 	}
 
+	wavout = 0;
+	if(isOption(argc,argv,"wav",NULL)>0)
+	{
+		wavout = 1;
+	}
+
 	if(!stdoutmode)
 	{
 		printf("pocsag v0.0.1.1\n");
@@ -628,7 +637,10 @@ int main(int argc, char* argv[])
 		else
 		{
 			// file mode : create iq + wav files
-			wave1 = create_wave("out.sdriq",iqgen.sample_rate,WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ);//WAVE_FILE_FORMAT_WAV_8BITS_STEREO);
+			if(wavout)
+				wave1 = create_wave("out.wav",iqgen.sample_rate,WAVE_FILE_FORMAT_WAV_8BITS_STEREO);
+			else
+				wave1 = create_wave("out.sdriq",iqgen.sample_rate,WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ);
 		}
 
 		if(wave1)
@@ -668,6 +680,20 @@ int main(int argc, char* argv[])
 				else
 					batchescnt = set_numerical_frame((poc_batch *)&batches, MAXBATCHCNT-1, ric, func&3, (char*)&message);
 			}
+
+
+#ifdef DEBUG
+			fprintf(stderr,"\nFrames/batches data:\n");
+			unsigned char * ptr;
+			ptr = (unsigned char *)&batches;
+			for(i=0;i<sizeof(poc_batch) * batchescnt;i++)
+			{
+				if(!(i&0xF))
+				   fprintf(stderr,"\n");
+				fprintf(stderr,"%.2X ",*ptr++);
+			}
+			fprintf(stderr,"\n");
+#endif
 
 			if( batchescnt < 0 )
 				exit(1);

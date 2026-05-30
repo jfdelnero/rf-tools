@@ -87,6 +87,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
+#include <math.h>
 
 #include <stdint.h>
 
@@ -198,8 +199,10 @@ void printhelp(char* argv[])
 	printf("  -ric:[RIC]\t\t\t: RIC address (Default:8)\n");
 	printf("  -func:[function_code]\t\t: Function code (Default:0 Min/Max:0-3)\n");
 	printf("  -freqshift:[Hz]\t\t: FSK frequency shift (Default:4500 -> +4500Hz / -4500Hz)\n");
-	printf("  -smprate:[Hz]\t\t\t: IQ Sample rate (Default:2000000\n");
-	printf("  -alpha\t\t\t: Alphanumeric mode (Default: Numeric mode\n");
+	printf("  -smprate:[Hz]\t\t\t: IQ Sample rate (Default:2000000)\n");
+	printf("  -alpha\t\t\t: Alphanumeric mode (Default: Numeric mode)\n");
+	printf("  -level:[0-127]\t\t: Output level (Default: 126)\n");
+	printf("  -settle_time:[0-100]\t\t: Frequency change settle time, in percent of a bit period (Default: 20)\n");
 
 	printf("  -help \t\t\t: This help\n\n");
 	printf("Example : ./pocsag -generate -stdout -ric:154232 -message:\"Hello\" -alpha | hackrf_transfer  -f 466200500 -t -  -x 10 -a 0 -s 2000000\n");
@@ -533,6 +536,12 @@ int main(int argc, char* argv[])
 	int alpha;
 	int batchbruteforce;
 	int wavout;
+	int settle_time;
+	int settle_size;
+	int freqidx;
+	int * settle_buf;
+	double volinc;
+	int level;
 
 	wave_io * wave1;
 
@@ -606,6 +615,28 @@ int main(int argc, char* argv[])
 		wavout = 1;
 	}
 
+	settle_time = 20;
+	if(isOption(argc,argv,"settle_time",(char*)&temp_str)>0)
+	{
+		settle_time = atoi(temp_str);
+		if( settle_time < 0 )
+			settle_time = 0;
+
+		if( settle_time > 100 )
+			settle_time = 100;
+	}
+
+	level = 126;
+	if(isOption(argc,argv,"level",(char*)&temp_str)>0)
+	{
+		level = atoi(temp_str);
+		if( level < 0 )
+			level = 0;
+
+		if( level > 127 )
+			level = 127;
+	}
+
 	if(!stdoutmode)
 	{
 		printf("pocsag v0.0.1.1\n");
@@ -621,12 +652,28 @@ int main(int argc, char* argv[])
 		printhelp(argv);
 	}
 
+	settle_size = (int) ( (float)smprate / (float)baud*2 ) * ((float)settle_time/100.0);
+	if(settle_size<2)
+		settle_size = 2;
+
+
 	if(isOption(argc,argv,"generate",0)>0)
 	{
+		fprintf(stderr,"\nBaud:%d, RIC: %d, Function:%d, Alpha:%d, Message:%s\n", baud, ric, func, alpha, message );
+
+		settle_buf = calloc( 1, settle_size * sizeof(int) );
+		if(!settle_buf)
+			exit(-1);
+
+		for(i=0;i<settle_size;i++)
+		{
+			settle_buf[i] = cos( (double)i * ( (double)M_PI / (double)(settle_size-1)) ) * freqshift;
+		}
+
 		// IQ Modulator
 		iqgen.phase = 0;
 		iqgen.Frequency = CENTRAL_IF_FREQ;
-		iqgen.Amplitude = 120;
+		iqgen.Amplitude = 0;
 		iqgen.sample_rate = smprate;
 
 		if(stdoutmode)
@@ -696,7 +743,10 @@ int main(int argc, char* argv[])
 #endif
 
 			if( batchescnt < 0 )
+			{
+				free(settle_buf);
 				exit(1);
+			}
 
 			// Blank
 			i = 0;
@@ -710,21 +760,41 @@ int main(int argc, char* argv[])
 				i += BUFFER_IQ_SAMPLES_SIZE;
 			}
 
+			freqidx = settle_size / 2;
+
 			// Initial 750Hz tone
 			serial_init(&ser, 8, smprate, 750*2); // 750 Hz tone
+
+			iqgen.Amplitude = 0;
+
+			// Fade in
+			volinc = (float)level / (float)(smprate/60);
 
 			i = 0;
 			while(i < (smprate/5)) // ~ 200 ms
 			{
 				for(j=0;j<BUFFER_IQ_SAMPLES_SIZE;j++)
 				{
+					if(iqgen.Amplitude+volinc <= level)
+						iqgen.Amplitude += volinc;
+
 					if(serial_is_tx_reg_empty(&ser))
 					{
 						serial_tx_settxreg(&ser,0xAA);
 					}
 
-					iqgen.Frequency = ((double)CENTRAL_IF_FREQ + ( freqshift + ( (serial_tx_getlinestate(&ser) ) * ( -freqshift * 2 ) ) ) );
+					if( serial_tx_getlinestate(&ser) )
+					{
+						if(freqidx < settle_size - 1)
+							freqidx++;
+					}
+					else
+					{
+						if(freqidx)
+							freqidx--;
+					}
 
+					iqgen.Frequency = (double)CENTRAL_IF_FREQ + settle_buf[freqidx];
 					iq_wave_buf[j] = get_next_iq(&iqgen);
 				}
 
@@ -747,22 +817,50 @@ int main(int argc, char* argv[])
 							serial_tx_settxreg(&ser,tmp);
 					}
 
-					iqgen.Frequency = ((double)CENTRAL_IF_FREQ + ( freqshift + ( (serial_tx_getlinestate(&ser) ) * ( -freqshift * 2 ) ) ) );
+					if( serial_tx_getlinestate(&ser) )
+					{
+						if(freqidx < settle_size - 1)
+							freqidx++;
+					}
+					else
+					{
+						if(freqidx)
+							freqidx--;
+					}
 
+					iqgen.Frequency = (double)CENTRAL_IF_FREQ + settle_buf[freqidx];
 					iq_wave_buf[j] = get_next_iq(&iqgen);
 					j++;
 				}
 
-				write_wave(wave1, &iq_wave_buf,BUFFER_IQ_SAMPLES_SIZE);
+				write_wave(wave1, &iq_wave_buf,j);
 			}
 
-			// Blank
+			// Fade out + Blank
 			i = 0;
-			while(i < (smprate/20)) // ~ 50 ms
+			volinc = iqgen.Amplitude / (smprate/40);
+			while(i < (smprate/40)) // ~ 50 ms
 			{
 				for(j=0;j<BUFFER_IQ_SAMPLES_SIZE;j++)
 				{
-					iq_wave_buf[j] = 0;
+					if(iqgen.Amplitude >= volinc)
+						iqgen.Amplitude -= volinc;
+					else
+						iqgen.Amplitude = 0;
+
+					if( serial_tx_getlinestate(&ser) )
+					{
+						if(freqidx < settle_size - 1)
+							freqidx++;
+					}
+					else
+					{
+						if(freqidx)
+							freqidx--;
+					}
+
+					iqgen.Frequency = (double)CENTRAL_IF_FREQ + settle_buf[freqidx];
+					iq_wave_buf[j] = get_next_iq(&iqgen);
 				}
 				write_wave(wave1, &iq_wave_buf,BUFFER_IQ_SAMPLES_SIZE);
 				i+= BUFFER_IQ_SAMPLES_SIZE;
@@ -770,6 +868,8 @@ int main(int argc, char* argv[])
 
 			close_wave(wave1);
 		}
+
+		free(settle_buf);
 	}
 
 	if( (isOption(argc,argv,"help",0)<=0) &&

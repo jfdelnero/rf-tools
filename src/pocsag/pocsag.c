@@ -418,7 +418,7 @@ int set_numerical_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsig
 	return ba+1;
 }
 
-int set_alphanum_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsigned int func, char * message)
+int set_alphanum_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsigned int func, char * message, int message_size)
 {
 	int ba,b,i,w,framecnt;
 	int digitcnt;
@@ -427,13 +427,7 @@ int set_alphanum_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsign
 	unsigned char stream[80+1];
 	int bitin,bitout;
 
-	i = 0;
-	while(message[i] != 0)
-	{
-		i++;
-	}
-
-	digitcnt = i;
+	digitcnt = message_size;
 
 	framecnt = (digitcnt*7) / 20;
 	if( (digitcnt*7) % 20 )
@@ -448,9 +442,9 @@ int set_alphanum_frame(poc_batch * batch, int batchcnt, unsigned int ric, unsign
 	i = 0;
 	bitin = 0;
 	bitout = 0;
-	while( message[bitin/7] && ((bitout>>3) < sizeof(stream)-1) )
+	while( ((bitin/7)<message_size) && ((bitout>>3) < sizeof(stream)-1) )
 	{
-		if( LUT_ByteBitsInverter[message[bitin/7]<<1] & ( 0x40 >> (bitin%7) ) )
+		if( LUT_ByteBitsInverter[(message[bitin/7]&0x7F)<<1] & ( 0x40 >> (bitin%7) ) )
 			stream[bitout>>3] |= ( 0x80 >> (bitout&7) );
 
 		bitin++;
@@ -545,6 +539,7 @@ int main(int argc, char* argv[])
 	double volinc;
 	int level;
 	int verbose;
+	int message_size;
 
 	wave_io * wave1;
 
@@ -556,6 +551,8 @@ int main(int argc, char* argv[])
 	uint16_t iq_wave_buf[BUFFER_IQ_SAMPLES_SIZE];
 
 	serial_gen ser;
+
+	message_size = 0;
 
 	memset(&pocctx,0,sizeof(pocctx));
 
@@ -592,6 +589,7 @@ int main(int argc, char* argv[])
 	message[0] = 0;
 	if(isOption(argc,argv,"message",(char*)&message)>0)
 	{
+		message_size = strlen(message);
 	}
 
 	temp_str[0] = 0;
@@ -602,6 +600,7 @@ int main(int argc, char* argv[])
 			FILE * f;
 			int size;
 
+			message_size = 0;
 			f = fopen(temp_str,"rb");
 			if(f)
 			{
@@ -618,6 +617,10 @@ int main(int argc, char* argv[])
 				if(fread(&message,size,1,f) != 1 )
 				{
 					fprintf(stderr,"Error : Can't read %s ...\n",temp_str);
+				}
+				else
+				{
+					message_size = size;
 				}
 
 				fclose(f);
@@ -756,7 +759,7 @@ int main(int argc, char* argv[])
 					for(i=0;i<8;i++)
 					{
 						if( alpha )
-							batchescnt =  set_alphanum_frame((poc_batch *)&batches[j], MAXBATCHCNT-1, ricbatch+i, func&3, (char*)&message);
+							batchescnt =  set_alphanum_frame((poc_batch *)&batches[j], MAXBATCHCNT-1, ricbatch+i, func&3, (char*)&message, message_size);
 						else
 							batchescnt = set_numerical_frame((poc_batch *)&batches[j], MAXBATCHCNT-1, ricbatch+i, func&3, (char*)&message);
 					}
@@ -767,7 +770,7 @@ int main(int argc, char* argv[])
 			else
 			{
 				if( alpha )
-					batchescnt =  set_alphanum_frame((poc_batch *)&batches, MAXBATCHCNT-1, ric, func&3, (char*)&message);
+					batchescnt =  set_alphanum_frame((poc_batch *)&batches, MAXBATCHCNT-1, ric, func&3, (char*)&message, message_size);
 				else
 					batchescnt = set_numerical_frame((poc_batch *)&batches, MAXBATCHCNT-1, ric, func&3, (char*)&message);
 			}

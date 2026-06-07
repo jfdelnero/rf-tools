@@ -201,9 +201,11 @@ void printhelp(char* argv[])
 	printf("  -freqshift:[Hz]\t\t: FSK frequency shift (Default:4500 -> +4500Hz / -4500Hz)\n");
 	printf("  -smprate:[Hz]\t\t\t: IQ Sample rate (Default:2000000)\n");
 	printf("  -alpha\t\t\t: Alphanumeric mode (Default: Numeric mode)\n");
+	printf("  -message:message_txt\t\t: Message to send\n");
+	printf("  -fmessage:message_file.txt\t: File message to send\n");
 	printf("  -level:[0-127]\t\t: Output level (Default: 126)\n");
 	printf("  -settle_time:[0-100]\t\t: Frequency change settle time, in percent of a bit period (Default: 20)\n");
-
+	printf("  -verbose \t\t\t: Verbose mode\n");
 	printf("  -help \t\t\t: This help\n\n");
 	printf("Example : ./pocsag -generate -stdout -ric:154232 -message:\"Hello\" -alpha | hackrf_transfer  -f 466200500 -t -  -x 10 -a 0 -s 2000000\n");
 	printf("\n");
@@ -542,6 +544,7 @@ int main(int argc, char* argv[])
 	int * settle_buf;
 	double volinc;
 	int level;
+	int verbose;
 
 	wave_io * wave1;
 
@@ -591,6 +594,41 @@ int main(int argc, char* argv[])
 	{
 	}
 
+	temp_str[0] = 0;
+	if(isOption(argc,argv,"fmessage",(char*)&temp_str)>0)
+	{
+		if(strlen(temp_str))
+		{
+			FILE * f;
+			int size;
+
+			f = fopen(temp_str,"rb");
+			if(f)
+			{
+				memset( message,0, sizeof(message));
+
+				fseek(f, 0, SEEK_END);
+
+				size = ftell(f);
+
+				if(size >= sizeof(message))
+					size = sizeof(message) - 1;
+
+				fseek(f, 0, SEEK_SET);
+				if(fread(&message,size,1,f) != 1 )
+				{
+					fprintf(stderr,"Error : Can't read %s ...\n",temp_str);
+				}
+
+				fclose(f);
+			}
+			else
+			{
+				fprintf(stderr,"Error : Can't open %s ...\n",temp_str);
+			}
+		}
+	}
+
 	alpha = 0;
 	if(isOption(argc,argv,"alpha",NULL)>0)
 	{
@@ -635,6 +673,12 @@ int main(int argc, char* argv[])
 
 		if( level > 127 )
 			level = 127;
+	}
+
+	verbose = 0;
+	if(isOption(argc,argv,"verbose",NULL)>0)
+	{
+		verbose = 1;
 	}
 
 	if(!stdoutmode)
@@ -729,18 +773,19 @@ int main(int argc, char* argv[])
 			}
 
 
-#ifdef DEBUG
-			fprintf(stderr,"\nFrames/batches data:\n");
-			unsigned char * ptr;
-			ptr = (unsigned char *)&batches;
-			for(i=0;i<sizeof(poc_batch) * batchescnt;i++)
+			if(verbose)
 			{
-				if(!(i&0xF))
-				   fprintf(stderr,"\n");
-				fprintf(stderr,"%.2X ",*ptr++);
+				fprintf(stderr,"\nFrames/batches data:\n");
+				unsigned char * ptr;
+				ptr = (unsigned char *)&batches;
+				for(i=0;i<sizeof(poc_batch) * batchescnt;i++)
+				{
+					if(!(i&0xF))
+						fprintf(stderr,"\n");
+					fprintf(stderr,"%.2X ",*ptr++);
+				}
+				fprintf(stderr,"\n");
 			}
-			fprintf(stderr,"\n");
-#endif
 
 			if( batchescnt < 0 )
 			{

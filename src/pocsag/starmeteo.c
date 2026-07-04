@@ -468,7 +468,7 @@ int main(int argc, char* argv[])
 					default:
 						// Trame prévision
 
-						printf("Weather frame - Header : ");
+						printf("Forecast frame - Header : ");
 
 						for(i=0;i<6;i++)
 							printf("%X",genfrm[b].quartetfrm[i]);

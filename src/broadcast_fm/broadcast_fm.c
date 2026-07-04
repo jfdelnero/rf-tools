@@ -134,6 +134,8 @@
 
 #include <stdint.h>
 
+#include "cmd_param.h"
+
 #include "wave.h"
 
 #include "modulator.h"
@@ -166,65 +168,6 @@
 
 int stdoutmode;
 
-int isOption(int argc, char* argv[],char * paramtosearch,char * argtoparam)
-{
-	int param=1;
-	int i,j;
-
-	char option[512];
-
-	memset(option,0,512);
-	while(param<=argc)
-	{
-		if(argv[param])
-		{
-			if(argv[param][0]=='-')
-			{
-				memset(option,0,512);
-
-				j=0;
-				i=1;
-				while( argv[param][i] && argv[param][i]!=':')
-				{
-					option[j]=argv[param][i];
-					i++;
-					j++;
-				}
-
-				if( !strcmp(option,paramtosearch) )
-				{
-					if(argtoparam)
-					{
-						if(argv[param][i]==':')
-						{
-							i++;
-							j=0;
-							while( argv[param][i] )
-							{
-								argtoparam[j]=argv[param][i];
-								i++;
-								j++;
-							}
-							argtoparam[j]=0;
-							return 1;
-						}
-						else
-						{
-							return -1;
-						}
-					}
-					else
-					{
-						return 1;
-					}
-				}
-			}
-		}
-		param++;
-	}
-
-	return 0;
-}
 
 void printhelp(char* argv[])
 {
@@ -298,7 +241,7 @@ int main(int argc, char* argv[])
 	no_rds = 0;
 	silence = 0;
 
-	if(isOption(argc,argv,"stdout",NULL)>0)
+	if(isOption(argc,argv,"stdout",NULL,NULL)>0)
 	{
 		stdoutmode = 1;
 	}
@@ -313,34 +256,34 @@ int main(int argc, char* argv[])
 	}
 
 	// help option...
-	if(isOption(argc,argv,"help",0)>0)
+	if(isOption(argc,argv,"help",0,NULL)>0)
 	{
 		printhelp(argv);
 	}
 
 	memset(filename,0,sizeof(filename));
 	// Input file name option
-	if(isOption(argc,argv,"mod_file",(char*)&filename)>0)
+	if(isOption(argc,argv,"mod_file",(char*)&filename,NULL)>0)
 	{
 		printf("Input file : %s\n",filename);
 	}
 
-	if(isOption(argc,argv,"mono",NULL)>0)
+	if(isOption(argc,argv,"mono",NULL,NULL)>0)
 	{
 		monomode = 1;
 	}
 
-	if(isOption(argc,argv,"no_rds",NULL)>0)
+	if(isOption(argc,argv,"no_rds",NULL,NULL)>0)
 	{
 		no_rds = 1;
 	}
 
-	if(isOption(argc,argv,"silence",NULL)>0)
+	if(isOption(argc,argv,"silence",NULL,NULL)>0)
 	{
 		silence = 1;
 	}
 
-	if(isOption(argc,argv,"generate",0)>0)
+	if(isOption(argc,argv,"generate",0,NULL)>0)
 	{
 		// Init the .mod player and load the mod file.
 		hxcmod_init(&modctx);
@@ -421,7 +364,7 @@ int main(int argc, char* argv[])
 		rds_carrier_57KHz_gen.sample_rate = SUBCARRIERS_SAMPLE_RATE;
 
 		init_rds_encoder(&rdsstat,SUBCARRIERS_SAMPLE_RATE);
-		if(isOption(argc,argv,"rdstxt",(char*)&rdstxt)>0)
+		if(isOption(argc,argv,"rdstxt",(char*)&rdstxt,NULL)>0)
 		{
 			set_rds_text(&rdsstat,rdstxt);
 		}
@@ -609,8 +552,8 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	if( (isOption(argc,argv,"help",0)<=0) &&
-		(isOption(argc,argv,"generate",0)<=0)
+	if( (isOption(argc,argv,"help",0,NULL)<=0) &&
+		(isOption(argc,argv,"generate",0,NULL)<=0)
 		)
 	{
 		printhelp(argv);

@@ -48,6 +48,8 @@
 
 #include <stdint.h>
 
+#include "cmd_param.h"
+
 #include "wave.h"
 
 #include "modulator.h"
@@ -70,66 +72,6 @@
 	} while (0)
 
 int stdoutmode;
-
-int isOption(int argc, char* argv[],char * paramtosearch,char * argtoparam)
-{
-	int param=1;
-	int i,j;
-
-	char option[512];
-
-	memset(option,0,512);
-	while(param<=argc)
-	{
-		if(argv[param])
-		{
-			if(argv[param][0]=='-')
-			{
-				memset(option,0,512);
-
-				j=0;
-				i=1;
-				while( argv[param][i] && argv[param][i]!=':')
-				{
-					option[j]=argv[param][i];
-					i++;
-					j++;
-				}
-
-				if( !strcmp(option,paramtosearch) )
-				{
-					if(argtoparam)
-					{
-						if(argv[param][i]==':')
-						{
-							i++;
-							j=0;
-							while( argv[param][i] )
-							{
-								argtoparam[j]=argv[param][i];
-								i++;
-								j++;
-							}
-							argtoparam[j]=0;
-							return 1;
-						}
-						else
-						{
-							return -1;
-						}
-					}
-					else
-					{
-						return 1;
-					}
-				}
-			}
-		}
-		param++;
-	}
-
-	return 0;
-}
 
 void printhelp(char* argv[])
 {
@@ -161,7 +103,7 @@ int main(int argc, char* argv[])
 
 	stdoutmode = 0;
 
-	if(isOption(argc,argv,"stdout",NULL)>0)
+	if(isOption(argc,argv,"stdout",NULL,NULL)>0)
 	{
 		stdoutmode = 1;
 	}
@@ -176,14 +118,14 @@ int main(int argc, char* argv[])
 	}
 
 	// help option...
-	if(isOption(argc,argv,"help",0)>0)
+	if(isOption(argc,argv,"help",0,NULL)>0)
 	{
 		printhelp(argv);
 	}
 
 	memset(filename,0,sizeof(filename));
 
-	if(isOption(argc,argv,"bmp_file",(char*)&filename)>0)
+	if(isOption(argc,argv,"bmp_file",(char*)&filename,NULL)>0)
 	{
 		printf("Input file : %s\n",filename);
 	}
@@ -202,7 +144,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	if(isOption(argc,argv,"generate",0)>0)
+	if(isOption(argc,argv,"generate",0,NULL)>0)
 	{
 		// IQ Modulator
 		iqgen.phase = 0;
@@ -210,7 +152,7 @@ int main(int argc, char* argv[])
 		iqgen.Amplitude = 127;
 		iqgen.sample_rate = IQ_SAMPLE_RATE;
 
-		init_composite(&vid_stat, 16000000, 768, 576,bmp_data.data);
+		init_composite(&vid_stat, IQ_SAMPLE_RATE, 768, 576,bmp_data.data);
 
 		if(stdoutmode)
 		{
@@ -222,7 +164,7 @@ int main(int argc, char* argv[])
 		{
 			// file mode : create iq + wav files
 			wave1 = create_wave("broadcast_tv.iq",iqgen.sample_rate,WAVE_FILE_FORMAT_RAW_8BITS_IQ);
-			wave2 = create_wave("broadcast_tv.wav",16000000,WAVE_FILE_FORMAT_WAV_16BITS_MONO);
+			wave2 = create_wave("broadcast_tv.wav",IQ_SAMPLE_RATE,WAVE_FILE_FORMAT_WAV_16BITS_MONO);
 		}
 
 		for(i=0;i<1024*16*2 || stdoutmode;i++)
@@ -244,8 +186,8 @@ int main(int argc, char* argv[])
 		close_wave(wave2);
 	}
 
-	if( (isOption(argc,argv,"help",0)<=0) &&
-		(isOption(argc,argv,"generate",0)<=0)
+	if( (isOption(argc,argv,"help",0,NULL)<=0) &&
+		(isOption(argc,argv,"generate",0,NULL)<=0)
 		)
 	{
 		printhelp(argv);

@@ -91,6 +91,8 @@
 
 #include <stdint.h>
 
+#include "cmd_param.h"
+
 #include "wave.h"
 #include "modulator.h"
 #include "serial.h"
@@ -126,69 +128,6 @@ typedef struct _poc
 	int frm_cnt;
 	int frm_end;
 }poc;
-
-int isOption(int argc, char* argv[],char * paramtosearch,char * argtoparam)
-{
-	int param=1;
-	int i,j;
-
-	char option[512];
-
-	memset(option,0,sizeof(option));
-
-	while(param<=argc)
-	{
-		if(argv[param])
-		{
-			if(argv[param][0]=='-')
-			{
-				memset(option,0,sizeof(option));
-
-				j=0;
-				i=1;
-				while( argv[param][i] && argv[param][i]!=':' && ( j < (sizeof(option) - 1)) )
-				{
-					option[j]=argv[param][i];
-					i++;
-					j++;
-				}
-
-				if( !strcmp(option,paramtosearch) )
-				{
-					if(argtoparam)
-					{
-						argtoparam[0] = 0;
-
-						if(argv[param][i]==':')
-						{
-							i++;
-							j=0;
-							while( argv[param][i] && j < (512 - 1) )
-							{
-								argtoparam[j]=argv[param][i];
-								i++;
-								j++;
-							}
-							argtoparam[j]=0;
-							return 1;
-						}
-						else
-						{
-							return -1;
-						}
-					}
-					else
-					{
-						return 1;
-					}
-				}
-			}
-		}
-		param++;
-	}
-
-	return 0;
-}
 
 void printhelp(char* argv[])
 {
@@ -557,43 +496,43 @@ int main(int argc, char* argv[])
 	memset(&pocctx,0,sizeof(pocctx));
 
 	stdoutmode = 0;
-	if(isOption(argc,argv,"stdout",NULL)>0)
+	if(isOption(argc,argv,"stdout",NULL,NULL)>0)
 	{
 		stdoutmode = 1;
 	}
 
 	baud = 1200;
-	if(isOption(argc,argv,"baud",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"baud",(char*)&temp_str,NULL)>0)
 	{
 		baud = atoi(temp_str);
 	}
 
 	ric = 8;
-	if(isOption(argc,argv,"ric",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"ric",(char*)&temp_str,NULL)>0)
 	{
 		ric = atoi(temp_str);
 	}
 
 	func = 0;
-	if(isOption(argc,argv,"func",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"func",(char*)&temp_str,NULL)>0)
 	{
 		func = atoi(temp_str);
 	}
 
 	freqshift = 4500;
-	if(isOption(argc,argv,"freqshift",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"freqshift",(char*)&temp_str,NULL)>0)
 	{
 		freqshift = atoi(temp_str);
 	}
 
 	message[0] = 0;
-	if(isOption(argc,argv,"message",(char*)&message)>0)
+	if(isOption(argc,argv,"message",(char*)&message,NULL)>0)
 	{
 		message_size = strlen(message);
 	}
 
 	temp_str[0] = 0;
-	if(isOption(argc,argv,"fmessage",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"fmessage",(char*)&temp_str,NULL)>0)
 	{
 		if(strlen(temp_str))
 		{
@@ -633,31 +572,31 @@ int main(int argc, char* argv[])
 	}
 
 	alpha = 0;
-	if(isOption(argc,argv,"alpha",NULL)>0)
+	if(isOption(argc,argv,"alpha",NULL,NULL)>0)
 	{
 		alpha = 1;
 	}
 
 	smprate = IQ_SAMPLE_RATE;
-	if(isOption(argc,argv,"smprate",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"smprate",(char*)&temp_str,NULL)>0)
 	{
 		smprate = atoi(temp_str);
 	}
 
 	batchbruteforce = 0;
-	if(isOption(argc,argv,"batch",NULL)>0)
+	if(isOption(argc,argv,"batch",NULL,NULL)>0)
 	{
 		batchbruteforce = 1;
 	}
 
 	wavout = 0;
-	if(isOption(argc,argv,"wav",NULL)>0)
+	if(isOption(argc,argv,"wav",NULL,NULL)>0)
 	{
 		wavout = 1;
 	}
 
 	settle_time = 20;
-	if(isOption(argc,argv,"settle_time",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"settle_time",(char*)&temp_str,NULL)>0)
 	{
 		settle_time = atoi(temp_str);
 		if( settle_time < 0 )
@@ -668,7 +607,7 @@ int main(int argc, char* argv[])
 	}
 
 	level = 126;
-	if(isOption(argc,argv,"level",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"level",(char*)&temp_str,NULL)>0)
 	{
 		level = atoi(temp_str);
 		if( level < 0 )
@@ -679,7 +618,7 @@ int main(int argc, char* argv[])
 	}
 
 	verbose = 0;
-	if(isOption(argc,argv,"verbose",NULL)>0)
+	if(isOption(argc,argv,"verbose",NULL,NULL)>0)
 	{
 		verbose = 1;
 	}
@@ -694,7 +633,7 @@ int main(int argc, char* argv[])
 	}
 
 	// help option...
-	if(isOption(argc,argv,"help",0)>0)
+	if(isOption(argc,argv,"help",0,NULL)>0)
 	{
 		printhelp(argv);
 	}
@@ -704,7 +643,7 @@ int main(int argc, char* argv[])
 		settle_size = 2;
 
 
-	if(isOption(argc,argv,"generate",0)>0)
+	if(isOption(argc,argv,"generate",0,NULL)>0)
 	{
 		fprintf(stderr,"\nBaud:%d, RIC: %d, Function:%d, Alpha:%d, Message:%s\n", baud, ric, func, alpha, message );
 
@@ -920,8 +859,8 @@ int main(int argc, char* argv[])
 		free(settle_buf);
 	}
 
-	if( (isOption(argc,argv,"help",0)<=0) &&
-		(isOption(argc,argv,"generate",0)<=0)
+	if( (isOption(argc,argv,"help",0,NULL)<=0) &&
+		(isOption(argc,argv,"generate",0,NULL)<=0)
 		)
 	{
 		printhelp(argv);

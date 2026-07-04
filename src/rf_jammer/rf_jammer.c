@@ -36,6 +36,8 @@
 
 #include <stdint.h>
 
+#include "cmd_param.h"
+
 #include "wave.h"
 
 #include "modulator.h"
@@ -56,72 +58,14 @@
 int verbose;
 int stdoutmode;
 
-int isOption(int argc, char* argv[],char * paramtosearch,char * argtoparam)
-{
-	int param=1;
-	int i,j;
-
-	char option[512];
-
-	memset(option,0,512);
-	while(param<=argc)
-	{
-		if(argv[param])
-		{
-			if(argv[param][0]=='-')
-			{
-				memset(option,0,512);
-
-				j=0;
-				i=1;
-				while( argv[param][i] && argv[param][i]!=':')
-				{
-					option[j]=argv[param][i];
-					i++;
-					j++;
-				}
-
-				if( !strcmp(option,paramtosearch) )
-				{
-					if(argtoparam)
-					{
-						if(argv[param][i]==':')
-						{
-							i++;
-							j=0;
-							while( argv[param][i] )
-							{
-								argtoparam[j]=argv[param][i];
-								i++;
-								j++;
-							}
-							argtoparam[j]=0;
-							return 1;
-						}
-						else
-						{
-							return -1;
-						}
-					}
-					else
-					{
-						return 1;
-					}
-				}
-			}
-		}
-		param++;
-	}
-
-	return 0;
-}
-
 void printhelp(char* argv[])
 {
 	printf("Options:\n");
 	printf("  -stdout\t\t\t: IQ stream send to stdout\n");
 	printf("  -iq_rate\t\t\t: IQ rate (default : 10000000)\n");
 	printf("  -freq_bw:[Hz]\t\t\t: bandwith (Hz)\n");
+	printf("  -am_freq:[Hz]\t\t\t: amplitude modulation (Hz)\n");
+	printf("  -am_file:[file]\t\t\t: amplitude modulation (file source)\n");
 	printf("  -ping_pong_freq:[centi Hz]\t: ping pong freq (per step of 0.01 Hz)\n");
 	printf("  -jam_mode:[Mode id]\t\t: Mode. 0=ping pong, 1=random, 2=fixed frequency, 3=full iq random\n");
 	printf("  -jam_interval:[uS]\t\t: Interval (uS)\n");
@@ -150,6 +94,7 @@ int main(int argc, char* argv[])
 {
 	char temp_str[512];
 
+	char * sndbuf;
 	wave_io * wave1,*wave2;
 	uint16_t iq_wavebuf[ BUFFER_SAMPLES_SIZE ];
 
@@ -158,9 +103,11 @@ int main(int argc, char* argv[])
 
 	unsigned int i,j;
 	int freq_bw;
+	int am_freq;
 	int pulses_cnt;
 	int ping_pong_freq;
 	int jam_mode;
+	int smpi;
 
 	int pulses_interval, pulses_interval_cnt;
 	int pulses_long_interval,pulses_short_interval;
@@ -180,7 +127,15 @@ int main(int argc, char* argv[])
 	iq_wave_gen iqgen;
 
 	wave_gen ping_pong_gen;
+	wave_gen am_mod;
 
+	FILE *f;
+	int filesize;
+
+	f = NULL;
+	sndbuf = NULL;
+	filesize = 0;
+	am_freq = 0;
 	verbose=0;
 	stdoutmode = 0;
 	jam_mode = 0;
@@ -193,8 +148,9 @@ int main(int argc, char* argv[])
 	rand_interval = 0;
 	rand_duration = 0;
 	pulses_cnt = 0;
+	smpi = 0;
 
-	if(isOption(argc,argv,"stdout",NULL)>0)
+	if(isOption(argc,argv,"stdout",NULL,NULL)>0)
 	{
 		stdoutmode = 1;
 	}
@@ -209,14 +165,14 @@ int main(int argc, char* argv[])
 	}
 
 	// Verbose option...
-	if(isOption(argc,argv,"verbose",0)>0)
+	if(isOption(argc,argv,"verbose",0,NULL)>0)
 	{
 		printf("verbose mode\n");
 		verbose=1;
 	}
 
 	// help option...
-	if(isOption(argc,argv,"help",0)>0)
+	if(isOption(argc,argv,"help",0,NULL)>0)
 	{
 		printhelp(argv);
 	}
@@ -226,66 +182,94 @@ int main(int argc, char* argv[])
 	pulses_long_interval = 0;
 	pulses_duration = 2000000;
 
-	if(isOption(argc,argv,"freq_bw",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"freq_bw",(char*)&temp_str,NULL)>0)
 	{
 		freq_bw = atoi(temp_str);
 	}
 
-	if(isOption(argc,argv,"ping_pong_freq",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"am_freq",(char*)&temp_str,NULL)>0)
+	{
+		am_freq = atoi(temp_str);
+	}
+
+	if(isOption(argc,argv,"am_file",(char*)&temp_str,NULL)>0)
+	{
+		f = fopen(temp_str,"rb");
+		if(f)
+		{
+			fseek(f,0,SEEK_END);
+			filesize = ftell(f);
+			fseek(f,0,SEEK_SET);
+			sndbuf = malloc(filesize);
+			if(sndbuf)
+			{
+				fread( sndbuf, filesize, 1, f );
+			}
+			else
+			{
+				filesize = 0;
+			}
+
+			fclose(f);
+
+		}
+	}
+
+	if(isOption(argc,argv,"ping_pong_freq",(char*)&temp_str,NULL)>0)
 	{
 		ping_pong_freq = atoi(temp_str);
 	}
 
-	if(isOption(argc,argv,"jam_mode",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_mode",(char*)&temp_str,NULL)>0)
 	{
 		jam_mode = atoi(temp_str) ;
 	}
 
 	iqgen.sample_rate = IQ_SAMPLE_RATE;
-	if(isOption(argc,argv,"iq_rate",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"iq_rate",(char*)&temp_str,NULL)>0)
 	{
 		iqgen.sample_rate = atoi(temp_str);
 	}
 
-	if(isOption(argc,argv,"jam_interval",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_interval",(char*)&temp_str,NULL)>0)
 	{
 		pulses_interval = us2ticks(iqgen.sample_rate, atoi(temp_str));
 		pulses_short_interval = pulses_interval;
 	}
 
-	if(isOption(argc,argv,"jam_duration",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_duration",(char*)&temp_str,NULL)>0)
 	{
 		pulses_duration = us2ticks(iqgen.sample_rate, atoi(temp_str));
 	}
 
-	if(isOption(argc,argv,"jam_long_interval",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_long_interval",(char*)&temp_str,NULL)>0)
 	{
 		pulses_long_interval = us2ticks(iqgen.sample_rate, atoi(temp_str));
 	}
 
 	pulses_group_nb = 0;
-	if(isOption(argc,argv,"jam_group_pulses",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_group_pulses",(char*)&temp_str,NULL)>0)
 	{
 		pulses_group_nb = atoi(temp_str);
 	}
 
-	if(isOption(argc,argv,"rand_interval",NULL)>0)
+	if(isOption(argc,argv,"rand_interval",NULL,NULL)>0)
 	{
 		rand_interval = 1;
 	}
 
-	if(isOption(argc,argv,"rand_duration",NULL)>0)
+	if(isOption(argc,argv,"rand_duration",NULL,NULL)>0)
 	{
 		rand_duration = 1;
 	}
 
 	jam_total_duration = -1;
-	if(isOption(argc,argv,"jam_total_duration",(char*)&temp_str)>0)
+	if(isOption(argc,argv,"jam_total_duration",(char*)&temp_str,NULL)>0)
 	{
 		jam_total_duration = us2ticks(iqgen.sample_rate, atoi(temp_str));
 	}
 
-	if(isOption(argc,argv,"generate",0)>0)
+	if(isOption(argc,argv,"generate",0,NULL)>0)
 	{
 		memset(iq_wavebuf, 0, BUFFER_SAMPLES_SIZE * sizeof(uint16_t) );
 
@@ -298,6 +282,11 @@ int main(int argc, char* argv[])
 		ping_pong_gen.Frequency = ((double)ping_pong_freq) / 100.0;
 		ping_pong_gen.Amplitude = 100;
 		ping_pong_gen.sample_rate = iqgen.sample_rate;
+
+		am_mod.phase = 0;
+		am_mod.Amplitude = 50;
+		am_mod.Frequency = ((double)am_freq);
+		am_mod.sample_rate = iqgen.sample_rate;
 
 		// IQ Modulator
 		iqgen.phase = 0;
@@ -360,6 +349,17 @@ int main(int argc, char* argv[])
 						}
 
 						iqgen.Frequency = ((double)IF_FREQ + wavebuf_dbg2[j]);
+
+						if(sndbuf)
+						{
+							iqgen.Amplitude = 40 + (((float)sndbuf[(((smpi++)/100))%filesize]/(float)128))*56.0;
+						}
+						else
+						{
+							if(am_freq)
+								iqgen.Amplitude = 10 + 30 + f_get_next_sample(&am_mod) ;
+						}
+
 
 						if( pulses_interval_cnt < pulses_interval )
 						{
@@ -493,8 +493,8 @@ int main(int argc, char* argv[])
 	}
 
 
-	if( (isOption(argc,argv,"help",0)<=0) &&
-		(isOption(argc,argv,"generate",0)<=0)
+	if( (isOption(argc,argv,"help",0,NULL)<=0) &&
+		(isOption(argc,argv,"generate",0,NULL)<=0)
 		)
 	{
 		printhelp(argv);

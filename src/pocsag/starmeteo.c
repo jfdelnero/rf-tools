@@ -211,6 +211,70 @@ int gen_current_time(unsigned char * quartets)
 	return 9;
 }
 
+int gen_forecast(unsigned char * quartets, char * params)
+{
+	char *tmp_ptr,*tmp2_ptr;
+	char tmp2[512];
+	unsigned char b;
+	int params_dec[32];
+	int i,j;
+
+	memset(params_dec,0,sizeof(params_dec));
+
+	// ltemp_0,htemp_0,pic_0,pic_1,pic_2,pic_3,pic_4
+
+	i = 0;
+	tmp_ptr = params;
+	while( (tmp2_ptr = strchr(tmp_ptr,',')) && i < 16)
+	{
+		memset(tmp2,0,sizeof(tmp2));
+		strncpy(tmp2,tmp_ptr,tmp2_ptr - (char*)tmp_ptr);
+		params_dec[i++] = atoi(tmp2);
+		tmp_ptr = tmp2_ptr + 1;
+	}
+	params_dec[i] = atoi(tmp_ptr);
+
+	if(i<2)
+		i = 2;
+
+	j = i;
+
+	while(i<8)
+	{
+		params_dec[i] = params_dec[j];
+		i++;
+	}
+
+	//for(int j=0;j<i;j++)
+	//	printf(">> %d\n",params_dec[j]);
+
+	// Low temp
+	b = dectemp_to_bcd(params_dec[0]);
+	quartets[0] = (b>>4);
+	quartets[1] = (b&0xF);
+
+	// High temp
+	b = dectemp_to_bcd(params_dec[1]);
+	quartets[2] = (b>>4);
+	quartets[3] = (b&0xF);
+
+	// Pictos
+	for(j=0;j<5;j++)
+	{
+		quartets[4+(j*2)]     = (params_dec[2 + j] >> 4);
+		quartets[4+(j*2) + 1] = (params_dec[2 + j] & 0xF);
+	}
+
+	// Checksum
+	quartets[14] = 7;
+	for(i=0;i<14;i++)
+	{
+		quartets[14] += quartets[i];
+	}
+
+	return 15;
+}
+
 // Load and decode a frame
 int loadfrm(frame * frm, int idx, char *path)
 {
@@ -278,6 +342,7 @@ int main(int argc, char* argv[])
 	frame * genfrm;
 	int sum;
 	char tmp_str[512];
+	int forcast_cnt;
 
 	verbose = 0;
 	if(isOption(argc, argv,"verbose",NULL, NULL) )
@@ -570,4 +635,92 @@ int main(int argc, char* argv[])
 
 		free(genfrm);
 	}
+
+	forcast_cnt = 0;
+	param_start_index = 0;
+	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
+	{
+		forcast_cnt++;
+		param_start_index++;
+	}
+
+	if(forcast_cnt)
+	{
+		int departement;
+
+		departement = 75;
+
+		genfrm = calloc(sizeof(frame)*1,1);
+		if(!genfrm)
+			exit(-1);
+
+		genfrm->quartetfrm[0] = 0x4;
+		genfrm->quartetfrm[1] = (departement>>4) & 0xF;
+		genfrm->quartetfrm[2] = (departement   ) & 0xF;
+		genfrm->quartetfrm[3] = 0x0;
+		genfrm->quartetfrm[4] = 0x4;
+
+		genfrm->quartetfrm[5] = 0x7;
+		for(i=0;i<5;i++)
+		{
+			genfrm->quartetfrm[5] += genfrm->quartetfrm[i];
+		}
+
+		genfrm->quartets_cnt = 6;
+
+		i = 0;
+		while( i < genfrm->quartets_cnt )
+		{
+			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+			i++;
+		}
+
+		int size = (genfrm->quartets_cnt*4)/6;
+		i = 0;
+		while( i < size )
+		{
+			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
+			printf("%c",genfrm->frm[i]);
+			i++;
+		}
+
+		if(!quiet)
+			printf("\n");
+
+		free(genfrm);
+	}
+
+	param_start_index = 0;
+	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
+	{
+		genfrm = calloc(sizeof(frame)*1,1);
+		if(!genfrm)
+			exit(-1);
+
+		genfrm->quartets_cnt = gen_forecast(genfrm->quartetfrm,tmp_str);
+
+		i = 0;
+		while( i < genfrm->quartets_cnt )
+		{
+			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+			i++;
+		}
+
+		int size = (genfrm->quartets_cnt*4)/6;
+		i = 0;
+		while( i < size )
+		{
+			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
+			printf("%c",genfrm->frm[i]);
+			i++;
+		}
+
+		if(!quiet)
+			printf("\n");
+
+		free(genfrm);
+
+		param_start_index++;
+	}
 }
+

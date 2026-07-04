@@ -24,7 +24,7 @@ endif
 ifeq ($(findstring CYGWIN,$(shell uname)),CYGWIN)
 endif
 
-EXEC=broadcast_tv broadcast_fm rf_jammer pocsag
+EXEC=broadcast_tv broadcast_fm rf_jammer pocsag starmeteo
 
 all: $(EXEC)
 
@@ -40,10 +40,16 @@ rf_jammer:  rf_jammer.o wave.o modulator.o rand_gen.o composite.o std_crc32.o cm
 pocsag:  pocsag.o wave.o modulator.o serial.o std_crc32.o utils.o cmd_param.o
 	$(CC) -o $@    $^ $(LDFLAGS)
 
+starmeteo:  starmeteo.o utils.o cmd_param.o
+	$(CC) -o $@    $^ $(LDFLAGS)
+
 broadcast_fm.o: ../src/broadcast_fm/broadcast_fm.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 pocsag.o: ../src/pocsag/pocsag.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+starmeteo.o: ../src/pocsag/starmeteo.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 rf_jammer.o: ../src/rf_jammer/rf_jammer.c

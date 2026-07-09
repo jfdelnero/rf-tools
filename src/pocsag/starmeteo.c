@@ -366,10 +366,14 @@ int main(int argc, char* argv[])
 		printf("%s -encode:[HEX Quartets]\n",argv[0]);
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
 		printf("%s -curtime       Generate current date/hour frame\n",argv[0]);
+		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto],[Picto_2],[Picto_3],[Picto_4],[Picto_5]\n",argv[0]);
+
 		printf("%s -quiet\n",argv[0]);
 		printf("%s -verbose\n",argv[0]);
 		printf("\n");
-		printf("Example: ./%s -prev_analyze ../previsions_ok/*.txt\n",argv[0]);
+		printf("Example: %s -decode ../previsions_ok/*.txt\n",argv[0]);
+		printf("Example: %s -curtime -quiet\n",argv[0]);
+		printf("Example: %s -forecast:-10,40,1,2,3,4,5 -forecast:-11,41,6,7,8,9,10 -forecast:-12,42,11,12,13,14,15 -forecast:-13,43,16,17,18,19,20 -quiet\n",argv[0]);
 		exit(0);
 	}
 

@@ -477,6 +477,8 @@ int main(int argc, char* argv[])
 						for(i=0;i<6;i++)
 							printf("%X",genfrm[b].quartetfrm[i]);
 
+						printf(", Area Code : %.2d", (genfrm[b].quartetfrm[1]<<4) | genfrm[b].quartetfrm[2]);
+
 						sum = 0x7;
 						i = 0;
 						while(i<5)

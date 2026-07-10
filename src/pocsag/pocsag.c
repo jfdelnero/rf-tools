@@ -144,6 +144,7 @@ void printhelp(char* argv[])
 	printf("  -fmessage:message_file.txt\t: File message to send\n");
 	printf("  -level:[0-127]\t\t: Output level (Default: 126)\n");
 	printf("  -settle_time:[0-100]\t\t: Frequency change settle time, in percent of a bit period (Default: 20)\n");
+	printf("  -bits_stream_out\t\t: Enable bits stream output\n");
 	printf("  -verbose \t\t\t: Verbose mode\n");
 	printf("  -help \t\t\t: This help\n\n");
 	printf("Example : ./pocsag -generate -stdout -ric:154232 -message:\"Hello\" -alpha | hackrf_transfer  -f 466200500 -t -  -x 10 -a 0 -s 2000000\n");
@@ -479,6 +480,8 @@ int main(int argc, char* argv[])
 	int level;
 	int verbose;
 	int message_size;
+	int ser_state;
+	int data_stream_mode;
 
 	wave_io * wave1;
 
@@ -523,6 +526,12 @@ int main(int argc, char* argv[])
 	if(isOption(argc,argv,"freqshift",(char*)&temp_str,NULL)>0)
 	{
 		freqshift = atoi(temp_str);
+	}
+
+	data_stream_mode = 0;
+	if(isOption(argc,argv,"bits_stream_out",NULL,NULL)>0)
+	{
+		data_stream_mode = 1;
 	}
 
 	message[0] = 0;
@@ -770,7 +779,9 @@ int main(int argc, char* argv[])
 						serial_tx_settxreg(&ser,0xAA);
 					}
 
-					if( serial_tx_getlinestate(&ser) )
+					ser_state = serial_tx_getlinestate(&ser);
+
+					if( ser_state & 1 )
 					{
 						if(freqidx < settle_size - 1)
 							freqidx++;
@@ -804,7 +815,9 @@ int main(int argc, char* argv[])
 							serial_tx_settxreg(&ser,tmp);
 					}
 
-					if( serial_tx_getlinestate(&ser) )
+					ser_state = serial_tx_getlinestate(&ser);
+
+					if( ser_state & 1 )
 					{
 						if(freqidx < settle_size - 1)
 							freqidx++;
@@ -813,6 +826,11 @@ int main(int argc, char* argv[])
 					{
 						if(freqidx)
 							freqidx--;
+					}
+
+					if( (ser_state & 0x2) && data_stream_mode )
+					{
+						fprintf(stderr,"%d", ser_state & 1);
 					}
 
 					iqgen.Frequency = (double)CENTRAL_IF_FREQ + settle_buf[freqidx];
@@ -835,7 +853,9 @@ int main(int argc, char* argv[])
 					else
 						iqgen.Amplitude = 0;
 
-					if( serial_tx_getlinestate(&ser) )
+					ser_state = serial_tx_getlinestate(&ser);
+
+					if( ser_state & 1 )
 					{
 						if(freqidx < settle_size - 1)
 							freqidx++;

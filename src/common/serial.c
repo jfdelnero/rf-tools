@@ -48,20 +48,26 @@ void serial_init(serial_gen * ctx, int bitcnt, unsigned int sample_rate, unsigne
 
 int serial_tx_getlinestate(serial_gen * ctx)
 {
+	int update_flag;
+
+	update_flag = 0;
+
 	if ( ctx->acc > (((uint32_t)0xFFFFFFFF) - ctx->inc_acc) )
 	{
 		// Overflow... Next bit
 		ctx->cur_bit = ctx->tx_reg & ctx->mask;
 		// If mask == 0 -> shifter empty !
 		ctx->mask >>= 1;
+
+		update_flag = 0x2;
 	}
 
 	ctx->acc += ctx->inc_acc;
 
 	if( ctx->cur_bit )
-	return 1;
+		return 1 | update_flag;
 	else
-	return 0;
+		return 0 | update_flag;
 
 }
 

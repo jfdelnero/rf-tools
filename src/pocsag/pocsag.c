@@ -142,6 +142,7 @@ void printhelp(char* argv[])
 	printf("  -alpha\t\t\t: Alphanumeric mode (Default: Numeric mode)\n");
 	printf("  -message:message_txt\t\t: Message to send\n");
 	printf("  -fmessage:message_file.txt\t: File message to send\n");
+	printf("  -stdin_message\t\t: Message to send from stdin\n");
 	printf("  -level:[0-127]\t\t: Output level (Default: 126)\n");
 	printf("  -settle_time:[0-100]\t\t: Frequency change settle time, in percent of a bit period (Default: 20)\n");
 	printf("  -bits_stream_out\t\t: Enable bits stream output\n");
@@ -577,6 +578,19 @@ int main(int argc, char* argv[])
 			{
 				fprintf(stderr,"Error : Can't open %s ...\n",temp_str);
 			}
+		}
+	}
+
+	if(isOption(argc,argv,"stdin_message",NULL,NULL)>0)
+	{
+		memset( message,0, sizeof(message));
+		if(fgets(message, sizeof(message), stdin))
+		{
+			if (message[strlen(message)-1] == '\n')
+			{
+				message[strlen(message)-1] = 0;
+			}
+			message_size = strlen(message);
 		}
 	}
 

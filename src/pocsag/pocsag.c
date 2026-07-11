@@ -483,6 +483,7 @@ int main(int argc, char* argv[])
 	int message_size;
 	int ser_state;
 	int data_stream_mode;
+	int quiet;
 
 	wave_io * wave1;
 
@@ -494,6 +495,8 @@ int main(int argc, char* argv[])
 	uint16_t iq_wave_buf[BUFFER_IQ_SAMPLES_SIZE];
 
 	serial_gen ser;
+
+	quiet = 0;
 
 	message_size = 0;
 
@@ -533,6 +536,7 @@ int main(int argc, char* argv[])
 	if(isOption(argc,argv,"bits_stream_out",NULL,NULL)>0)
 	{
 		data_stream_mode = 1;
+		stdoutmode = 0;
 	}
 
 	message[0] = 0;
@@ -646,7 +650,13 @@ int main(int argc, char* argv[])
 		verbose = 1;
 	}
 
-	if(!stdoutmode)
+	quiet = 0;
+	if(isOption(argc,argv,"quiet",NULL,NULL)>0)
+	{
+		quiet = 1;
+	}
+
+	if(!stdoutmode && !quiet)
 	{
 		printf("pocsag v0.0.1.1\n");
 		printf("Copyright (C) 2026 Jean-Francois DEL NERO\n");
@@ -668,7 +678,8 @@ int main(int argc, char* argv[])
 
 	if(isOption(argc,argv,"generate",0,NULL)>0)
 	{
-		fprintf(stderr,"\nBaud:%d, RIC: %d, Function:%d, Alpha:%d, Message:%s\n", baud, ric, func, alpha, message );
+		if(!quiet)
+			fprintf(stderr,"\nBaud:%d, RIC: %d, Function:%d, Alpha:%d, Message:%s\n", baud, ric, func, alpha, message );
 
 		settle_buf = calloc( 1, settle_size * sizeof(int) );
 		if(!settle_buf)
@@ -685,21 +696,26 @@ int main(int argc, char* argv[])
 		iqgen.Amplitude = 0;
 		iqgen.sample_rate = smprate;
 
-		if(stdoutmode)
+		wave1 = NULL;
+
+		if( !data_stream_mode )
 		{
-			// stdout / stream mode : IQ are outputed to the stdout -> use a pipe to hackrf_transfer
-			wave1 = create_wave(NULL,iqgen.sample_rate,WAVE_FILE_FORMAT_RAW_8BITS_IQ);
-		}
-		else
-		{
-			// file mode : create iq + wav files
-			if(wavout)
-				wave1 = create_wave("out.wav",iqgen.sample_rate,WAVE_FILE_FORMAT_WAV_8BITS_STEREO);
+			if(stdoutmode)
+			{
+				// stdout / stream mode : IQ are outputed to the stdout -> use a pipe to hackrf_transfer
+				wave1 = create_wave(NULL,iqgen.sample_rate,WAVE_FILE_FORMAT_RAW_8BITS_IQ);
+			}
 			else
-				wave1 = create_wave("out.sdriq",iqgen.sample_rate,WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ);
+			{
+				// file mode : create iq + wav files
+				if(wavout)
+					wave1 = create_wave("out.wav",iqgen.sample_rate,WAVE_FILE_FORMAT_WAV_8BITS_STEREO);
+				else
+					wave1 = create_wave("out.sdriq",iqgen.sample_rate,WAVE_FILE_FORMAT_SDRIQ_8BITS_IQ);
+			}
 		}
 
-		if(wave1)
+		if(wave1 || data_stream_mode)
 		{
 			serial_init(&ser, 8, smprate, baud);
 
@@ -736,7 +752,6 @@ int main(int argc, char* argv[])
 				else
 					batchescnt = set_numerical_frame((poc_batch *)&batches, MAXBATCHCNT-1, ric, func&3, (char*)&message);
 			}
-
 
 			if(verbose)
 			{
@@ -844,7 +859,7 @@ int main(int argc, char* argv[])
 
 					if( (ser_state & 0x2) && data_stream_mode )
 					{
-						fprintf(stderr,"%d", ser_state & 1);
+						printf("%d", ser_state & 1);
 					}
 
 					iqgen.Frequency = (double)CENTRAL_IF_FREQ + settle_buf[freqidx];

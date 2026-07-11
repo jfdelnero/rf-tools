@@ -295,7 +295,13 @@ int loadfrm(frame * frm, int idx, char *path)
 
 		memset((char*)str,0,sizeof(str));
 
-		fgets ((char*)&str, sizeof(str), f);
+		if ( !fgets ((char*)&str, sizeof(str), f) )
+		{
+			fclose(f);
+			frm[idx].frm[0] = '\0';
+			frm[idx].quartets_cnt = 0;
+			return 0;
+		}
 
 		strtmp = strchr(str,'\n');
 		if(strtmp)

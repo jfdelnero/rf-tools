@@ -246,7 +246,7 @@ int gen_forecast(unsigned char * quartets, char * params)
 	}
 
 	//for(int j=0;j<i;j++)
-	//	printf(">> %d\n",params_dec[j]);
+	//  printf(">> %d\n",params_dec[j]);
 
 	// Low temp
 	b = dectemp_to_bcd(params_dec[0]);
@@ -344,6 +344,7 @@ int main(int argc, char* argv[])
 {
 	int i,idx,fidx;
 	int quiet,verbose;
+	int rpitx_outmode;
 	int param_start_index;
 	frame * genfrm;
 	int sum;
@@ -363,7 +364,7 @@ int main(int argc, char* argv[])
 	}
 
 	if(!quiet)
-		printf("startmeteo v0.1 -help format command line syntax.\n");
+		printf("startmeteo v0.2 -help format command line syntax.\n");
 
 	if(isOption(argc, argv,"help",NULL, NULL) )
 	{
@@ -371,10 +372,10 @@ int main(int argc, char* argv[])
 		printf("%s -decode [files]\n",argv[0]);
 		printf("%s -encode:[HEX Quartets]\n",argv[0]);
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
-		printf("%s -curtime       Generate current date/hour frame\n",argv[0]);
+		printf("%s -curtime      Generate current date/hour frame\n",argv[0]);
 		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto],[Picto_2],[Picto_3],[Picto_4],[Picto_5]\n",argv[0]);
 		printf("%s -areaid:[idcode]\n",argv[0]);
-
+		printf("%s -rpitx        rpitx output mode (RIC and function code specified at the string start)\n",argv[0]);
 		printf("%s -quiet\n",argv[0]);
 		printf("%s -verbose\n",argv[0]);
 		printf("\n");
@@ -382,6 +383,12 @@ int main(int argc, char* argv[])
 		printf("Example: %s -curtime -quiet\n",argv[0]);
 		printf("Example: %s -forecast:-10,40,1,2,3,4,5 -forecast:-11,41,6,7,8,9,10 -forecast:-12,42,11,12,13,14,15 -forecast:-13,43,16,17,18,19,20 -areaid:75 -quiet\n",argv[0]);
 		exit(0);
+	}
+
+	rpitx_outmode = 0;
+	if(isOption(argc, argv,"rpitx",NULL, NULL) )
+	{
+		rpitx_outmode = 1;
 	}
 
 	param_start_index = 1;
@@ -634,6 +641,12 @@ int main(int argc, char* argv[])
 			i++;
 		}
 
+		if( rpitx_outmode )
+		{
+			// RPITX string output : Put the RIC + function code before the message
+			printf("25176D:");
+		}
+
 		int size = (genfrm->quartets_cnt*4)/6;
 		i = 0;
 		while( i < size )
@@ -691,6 +704,12 @@ int main(int argc, char* argv[])
 		{
 			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
 			i++;
+		}
+
+		if( rpitx_outmode )
+		{
+			// RPITX string output : Put the RIC + function code before the message
+			printf("25176D:");
 		}
 
 		int size = (genfrm->quartets_cnt*4)/6;

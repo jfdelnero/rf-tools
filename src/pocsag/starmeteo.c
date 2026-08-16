@@ -350,6 +350,7 @@ int main(int argc, char* argv[])
 	int sum;
 	char tmp_str[512];
 	int forcast_cnt;
+	int prev_cnt;
 
 	verbose = 0;
 	if(isOption(argc, argv,"verbose",NULL, NULL) )
@@ -513,8 +514,13 @@ int main(int argc, char* argv[])
 						}
 						printf("\n");
 
+						prev_cnt = ( genfrm[b].quartets_cnt - ((4*6)/4) ) / ((10*6)/4);
+
+						if( prev_cnt > 6)
+							prev_cnt = 6;
+
 						idx = ((4*6)/4);
-						while( ( idx + ((10*6)/4) - ( (4*6)/4) ) <= genfrm[b].quartets_cnt )
+						while( prev_cnt > 0 )
 						{
 							int lowtemp,hightemp;
 
@@ -559,7 +565,20 @@ int main(int argc, char* argv[])
 							printf("\n");
 
 							idx += ((10*6)/4);
+							prev_cnt--;
 						}
+
+						if(idx < genfrm[b].quartets_cnt)
+						{
+							printf("Extra quartet(s) : ");
+							while( idx < genfrm[b].quartets_cnt )
+							{
+								printf("%X",genfrm[b].quartetfrm[idx]);
+								idx++;
+							}
+							printf("\n");
+						}
+
 					break;
 				}
 			}

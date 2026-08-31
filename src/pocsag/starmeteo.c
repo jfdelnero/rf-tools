@@ -29,7 +29,7 @@
 // Star Météo protocol :
 //
 // The Star Météo protocol was rebuilt based on multiple observations, tests
-// and team discussions with multiple people (ChrisJ, Jaymore, JeffHxC, obones...)
+// and team discussions with multiple people (ChrisJ, Jaymore, JeffHxC, obones, ...)
 // on the TetraHub Forum, the largest French language online community and discussion
 // board dedicated to radiocommunications, radio scanning, and digital radio systems
 //
@@ -45,7 +45,7 @@
 //
 // Quartets Encoding :
 //
-//    Valid POCSAG Alpha characters : 
+//    Valid POCSAG Alpha characters :
 //
 //    0x20<>0x22,
 //    0x24<>0x3F
@@ -65,6 +65,10 @@
 //
 // -------------------------------------------------------------------------------
 // Time Frame :
+//
+// | CURRENT_TIME_BLOCK | AREAS_ID_BLOCK |
+//
+// CURRENT_TIME_BLOCK :
 //
 // [0xF][HOUR][MINUTES_HIGH_BCD][MINUTES_LOW_BCD][MONTH][MONTH_DAY_YEAR_0][MONTH_DAY_YEAR_1][MONTH_DAY_YEAR_2][LOW_CHECKSUM]
 //
@@ -98,30 +102,73 @@
 //
 //    LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [0xF] to [MONTH_DAY_YEAR_2])
 //
+// ----
+//
+// AREAS_ID_BLOCK :
+//
+// Warning : Most of the data in this frame/block are not aligned to the quartets.
+//
+// [0x0][0x0][0x0]<TRANSMISSIONS_INTERVAL (5 bits)><NUMBER_OF_AREAS (5bits)><AREAS_ID_LIST (NUMBER_OF_AREAS*7 Bits)>[RFU][HIGH_CHECKSUM][LOW_CHECKSUM][0][0]
+//
+// TRANSMISSIONS_INTERVAL encoding :
+//
+//    5 bits length
+//    TRANSMISSIONS_INTERVAL <= (minutes between the forecast transmissions)
+//
+//    The station listening reference times are 00:00 AM, 06:00 AM, 12:00 PM and 06:00 PM.
+//    The listening 4 minutes window start time is : reference time + (TRANSMISSIONS_INTERVAL * AREA_INDEX).
+//    example : The Area list is : 75 91 78 93 92
+//             With TRANSMISSIONS_INTERVAL set to 12, if the station is set the to '93' area (index 3), the listening minutes is TRANSMISSIONS_INTERVAL * 3 = 36.
+//             So the station will listen the radio at 0h36, 6h36, 12h36 and 18h36.
+//
+// NUMBER_OF_AREAS encoding :
+//
+//    5 bits length
+//    NUMBER_OF_AREAS <= (number of 7 bits areas id following this field)
+//
+// AREAS_ID_LIST :
+//
+//    7 bits per ID. Total size : (7 bits * NUMBER_OF_AREAS) + pad to align the end of the list to the next quartet.
+//    Pad the last list quartet with 0.
+//
+//    AREAS_ID_LIST[x] <= French area ID (example : 75 = Paris)
+//
+// RFU :
+//
+//    Filling quartet. Can be 0x1, 0x5, 0x7...
+//
+// HIGH_CHECKSUM quartet encoding :
+//
+//    HIGH_CHECKSUM <= (0x7 + sum of all previous quartets (from quartet [0x0] to [RFU]))(7 downto 4)
+//
+// LOW_CHECKSUM quartet encoding :
+//
+//    LOW_CHECKSUM  <= (0x7 + sum of all previous quartets (from quartet [0xF] to [RFU]))(3 downto 0)
+//
 // -------------------------------------------------------------------------------
 // Forecasts frame
 //
-//    | Header (6 quartets) | n+0 day_forcast (15 quartets) | n+1 day_forcast (15 quartets) | ... | n+5 day_forcast (15 quartets) | Probability of rain frame (if TYPE==0x0) |
+//    | HEADER_BLOCK (6 quartets) | n+0 FORECAST_BLOCK (15 quartets) | n+1 FORECAST_BLOCK (15 quartets) | ... | n+5 FORECAST_BLOCK (15 quartets) | RAIN_PROBABILITY_BLOCK (if TYPE==0x0) |
 //
 // ----
 //
-// Header :
+// HEADER_BLOCK :
 //
-//    [TYPE][AREA_CODE_HIGH][AREA_CODE_LOW][0x0][0x4][LOW_CHECKSUM]
+//    [TYPE][AREA_ID_HIGH][AREA_ID_LOW][0x0][0x4][LOW_CHECKSUM]
 //
 // TYPE encoding :
 //    0x4 : Forecast without the rain probability forecast
 //    0x0 : Extended forecast with rain probability
 //
-// AREA_CODE_HIGH encoding :
+// AREA_ID_HIGH encoding :
 //
-//    AREA_CODE_HIGH <= (area code)(7 downto 4)
+//    AREA_ID_HIGH <= (area id)(7 downto 4)
 //
-// AREA_CODE_HIGH encoding :
+// AREA_ID_LOW encoding :
 //
-//    AREA_CODE_HIGH <= (area code)(3 downto 0)
+//    AREA_ID_LOW <= (area id)(3 downto 0)
 //
-// Note : Default area code used by the station : 75 - which is the Paris area.
+// Note : Default area id used by the station : 75 (Paris).
 //
 // LOW_CHECKSUM quartet encoding :
 //
@@ -129,7 +176,7 @@
 //
 // ----
 //
-// day_forecast :
+// FORECAST_BLOCK :
 //
 //    [LOW_TEMP_HIGH_BCD][LOW_TEMP_LOW_BCD][HIGH_TEMP_HIGH_BCD][HIGH_TEMP_LOW_BCD] ...
 //    [PICTO_CODE_HIGH_0][PICTO_CODE_LOW_0][PICTO_CODE_HIGH_1][PICTO_CODE_LOW_1][PICTO_CODE_HIGH_2][PICTO_CODE_LOW_2][PICTO_CODE_HIGH_3][PICTO_CODE_LOW_3][PICTO_CODE_HIGH_4][PICTO_CODE_LOW_5][LOW_CHECKSUM]
@@ -156,6 +203,11 @@
 //    LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [LOW_TEMP_HIGH_BCD] to [PICTO_CODE_LOW_5])
 //
 // ----
+//
+// RAIN_PROBABILITY_BLOCK :
+//
+// TODO
+//
 
 #include <errno.h>
 #include <stdio.h>
@@ -283,6 +335,29 @@ void set_quartet( unsigned char * buf, int idx, unsigned char q)
 	}
 
 	return;
+}
+
+uint32_t get_field(unsigned char * quartets_array, int bitidx, int fieldsize, int quartets_array_size)
+{
+	int j;
+	uint32_t val;
+
+	val = 0;
+	j = 0;
+	while(j<fieldsize && (bitidx >> 2) < quartets_array_size )
+	{
+		val <<= 1;
+
+		if ( quartets_array[bitidx >> 2] & (0x8 >> (bitidx&3)) )
+		{
+			val |= 0x1;
+		}
+
+		bitidx++;
+		j++;
+	}
+
+	return val;
 }
 
 // Encode temperature to BCD+40
@@ -482,7 +557,7 @@ int main(int argc, char* argv[])
 	frame * genfrm;
 	int sum;
 	char tmp_str[512];
-	int forcast_cnt;
+	int forecast_cnt;
 	int prev_cnt,ck;
 
 	verbose = 0;
@@ -614,6 +689,50 @@ int main(int argc, char* argv[])
 						{
 							printf(" (Bad checksum)  ");
 						}
+
+						printf(" Area codes : ");
+
+						i++;
+						idx = (i + 3) * 4;
+
+						int interval_minutes, areas_cnt, areas_id;
+
+						interval_minutes = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 5, MAX_MSG_SIZE*3);
+						idx += 5;
+
+						areas_cnt = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 5, MAX_MSG_SIZE*3);
+						idx += 5;
+
+						for(int areaidx=0;areaidx<areas_cnt;areaidx++)
+						{
+							areas_id = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 7, MAX_MSG_SIZE*3);
+							idx += 7;
+							printf("%d ", areas_id);
+						}
+
+						if (idx & 3)
+							idx = (idx & (~0x3)) + 0x4;
+
+						idx += 4;
+
+						printf("Interval (minutes) : %d ", interval_minutes);
+
+						sum = 0x7;
+						while(i<(idx>>2))
+						{
+							sum += genfrm[b].quartetfrm[i];
+							i++;
+						}
+
+						if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
+						{
+							printf(" (Valid checksum)") ;
+						}
+						else
+						{
+							printf(" (Bad checksum)  ");
+						}
+
 						printf("\n");
 
 					break;
@@ -816,15 +935,15 @@ int main(int argc, char* argv[])
 		free(genfrm);
 	}
 
-	forcast_cnt = 0;
+	forecast_cnt = 0;
 	param_start_index = 0;
 	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
 	{
-		forcast_cnt++;
+		forecast_cnt++;
 		param_start_index++;
 	}
 
-	if(forcast_cnt)
+	if(forecast_cnt)
 	{
 		int departement;
 

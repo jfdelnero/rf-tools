@@ -24,6 +24,115 @@
 // Change History (most recent first):
 ///////////////////////////////////////////////////////////////////////////////////
 
+///////////////////////////////////////////////////////////////////////////////////
+//
+// star météo protocol :
+//
+// POCSAG : 466.20625MHz, FSK (+/-4.5KHz, 0:+4.5KHz, 1:-4.5KHz), 1200 Bauds, 7 bits
+//          RIC:25176, Alpha, Function:3
+//
+// Quartets Encoding :
+// Valid POCSAG Alpha characters : 0x20<>0x22,0x24<>0x3F,0x41(A)<>0x5A(Z),0x6B(k)<>0x70(p),0x73(s)
+//
+// POCSAG Alpha character (c) to 6 bits raw conversion :
+// 	if c >= 'k' and c <= 'o' 6bitsraw = 59 + ( c - 'k' );
+//  if c == 'p' 6bitsraw = 0x20;
+//  if c == 's' 6bitsraw = 0x03;
+//  else 6bitsraw = c - 0x20;
+//
+// Quartets output :
+// 2 * 6 bits raw to conversion to 3 quartets
+// |543210||543210|... -> |5432|1054|3210|...
+//
+// -------------------------------------------------------------------------------
+// Time Frame :
+//
+// [0xF][HOUR][MINUTES_HIGH_BCD][MINUTES_LOW_BCD][MONTH][MONTH_DAY_YEAR_0][MONTH_DAY_YEAR_1][MONTH_DAY_YEAR_2][LOW_CHECKSUM]
+//
+// HOUR quartet encoding :
+//
+//    if hour <  10hour    then HOUR <= hour
+//                         else HOUR <= hour - 10
+//
+// MINUTES_HIGH_BCD quartet encoding :
+//
+//    if hour >= 10hour and hour <= 19hour then MINUTES_HIGH_BCD <= (minutes high BCD digit) + 10;
+//                                         else MINUTES_HIGH_BCD <= (minutes high BCD digit);
+//
+// MINUTES_LOW_BCD quartet encoding :
+//
+//    MINUTES_LOW_BCD <= (minutes low BCD digit)
+//
+// MONTH quartet encoding :
+//
+//    MONTH <= month - 1
+//
+// MONTH_DAY_YEAR_0,MONTH_DAY_YEAR_1,MONTH_DAY_YEAR_2 quartets encoding
+//
+// MONTH_DAY_YEAR_0(3 downto 2) <= (month day high BCD digit)(1 downto 0)
+// MONTH_DAY_YEAR_0(1 downto 0) <= (month day low BCD digit) (3 downto 2)
+// MONTH_DAY_YEAR_1(3 downto 2) <= (month day low BCD digit) (1 downto 0)
+// MONTH_DAY_YEAR_1(1 downto 0) <= (year - 2000)(5 downto 4)
+// MONTH_DAY_YEAR_2             <= (year - 2000)(3 downto 0)
+//
+// LOW_CHECKSUM quartet encoding :
+//
+// LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [0xF] to [MONTH_DAY_YEAR_2])
+//
+// -------------------------------------------------------------------------------
+// Forecasts frame
+//
+// | Header (6 quartets) | n+0 day_forcast (15 quartets) | n+1 day_forcast (15 quartets) | ... | n+5 day_forcast (15 quartets) | Probability of rain frame (if TYPE==0x0) |
+//
+// ----
+//
+// Header :
+//
+//    [TYPE][AREA_CODE_HIGH][AREA_CODE_LOW][0x0][0x4][LOW_CHECKSUM]
+//
+// TYPE encoding :
+//    0x4 : Forecast without the rain probability forecast
+//    0x0 : Extended forecast with rain probability
+//
+// AREA_CODE_HIGH encoding :
+//
+//    AREA_CODE_HIGH <= (area code)(7 downto 4)
+//
+// AREA_CODE_HIGH encoding :
+//
+//    AREA_CODE_HIGH <= (area code)(3 downto 0)
+//
+// Note : Default area code used by the station : 75 - which is the Paris area.
+//
+// LOW_CHECKSUM quartet encoding :
+//
+//    LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [TYPE] to [0x4])
+//
+// ----
+//
+// day_forecast :
+//
+//    [LOW_TEMP_HIGH_BCD][LOW_TEMP_LOW_BCD][HIGH_TEMP_HIGH_BCD][HIGH_TEMP_LOW_BCD] ...
+//    [PICTO_CODE_HIGH_0][PICTO_CODE_LOW_0][PICTO_CODE_HIGH_1][PICTO_CODE_LOW_1][PICTO_CODE_HIGH_2][PICTO_CODE_LOW_2][PICTO_CODE_HIGH_3][PICTO_CODE_LOW_3][PICTO_CODE_HIGH_4][PICTO_CODE_LOW_5][LOW_CHECKSUM]
+//
+//
+// LOW_TEMP_HIGH_BCD encoding :
+//
+//    LOW_TEMP_HIGH_BCD <= (temperature + 40) high BCD digit
+//
+// LOW_TEMP_LOW_BCD encoding :
+//
+//    LOW_TEMP_LOW_BCD <= (temperature + 40) low BCD digit
+//
+// PICTO_CODE_HIGH_X encoding :
+//
+//    PICTO_CODE_HIGH_X(3 downto 2) <= text_id(1 downto 0)
+//    PICTO_CODE_HIGH_X(1 downto 0) <= picto_id(5 downto 4)
+//
+// PICTO_CODE_LOW_X encoding :
+//
+//    PICTO_CODE_LOW_X <= picto_id(3 downto 0)
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -350,7 +459,7 @@ int main(int argc, char* argv[])
 	int sum;
 	char tmp_str[512];
 	int forcast_cnt;
-	int prev_cnt;
+	int prev_cnt,ck;
 
 	verbose = 0;
 	if(isOption(argc, argv,"verbose",NULL, NULL) )
@@ -570,13 +679,15 @@ int main(int argc, char* argv[])
 
 						if(idx < genfrm[b].quartets_cnt)
 						{
+							ck = 0;
 							printf("Extra quartet(s) : ");
 							while( idx < genfrm[b].quartets_cnt )
 							{
 								printf("%X",genfrm[b].quartetfrm[idx]);
+								ck += genfrm[b].quartetfrm[idx];
 								idx++;
 							}
-							printf("\n");
+							printf("\n ck:%x\n",ck);
 						}
 
 					break;
@@ -779,4 +890,3 @@ int main(int argc, char* argv[])
 		param_start_index++;
 	}
 }
-

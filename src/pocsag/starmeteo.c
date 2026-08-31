@@ -26,23 +26,42 @@
 
 ///////////////////////////////////////////////////////////////////////////////////
 //
-// star météo protocol :
+// Star Météo protocol :
+//
+// The Star Météo protocol was rebuilt based on multiple observations, tests
+// and team discussions with multiple people (ChrisJ, Jaymore, JeffHxC, obones...)
+// on the TetraHub Forum, the largest French language online community and discussion
+// board dedicated to radiocommunications, radio scanning, and digital radio systems
+//
+// Discussion starting point : https://forum.tetrahub.net/post91796.html#p91796
+//
+// Note : The following description use some VHDL syntaxes for the bitfields ("X downto x")
+// ----
+//
+// Transport :
 //
 // POCSAG : 466.20625MHz, FSK (+/-4.5KHz, 0:+4.5KHz, 1:-4.5KHz), 1200 Bauds, 7 bits
 //          RIC:25176, Alpha, Function:3
 //
 // Quartets Encoding :
-// Valid POCSAG Alpha characters : 0x20<>0x22,0x24<>0x3F,0x41(A)<>0x5A(Z),0x6B(k)<>0x70(p),0x73(s)
+//
+//    Valid POCSAG Alpha characters : 
+//
+//    0x20<>0x22,
+//    0x24<>0x3F
+//    0x41(A)<>0x5A(Z)
+//    0x6B(k)<>0x70(p)
+//    0x73(s)
 //
 // POCSAG Alpha character (c) to 6 bits raw conversion :
-// 	if c >= 'k' and c <= 'o' 6bitsraw = 59 + ( c - 'k' );
-//  if c == 'p' 6bitsraw = 0x20;
-//  if c == 's' 6bitsraw = 0x03;
-//  else 6bitsraw = c - 0x20;
+//    if c >= 'k' and c <= 'o' 6bitsraw = 59 + ( c - 'k' );
+//    if c == 'p' 6bitsraw = 0x20;
+//    if c == 's' 6bitsraw = 0x03;
+//    else 6bitsraw = c - 0x20;
 //
 // Quartets output :
-// 2 * 6 bits raw to conversion to 3 quartets
-// |543210||543210|... -> |5432|1054|3210|...
+//    2 * 6 bits raw to conversion to 3 quartets
+//    |543210||543210|... -> |5432|1054|3210|...
 //
 // -------------------------------------------------------------------------------
 // Time Frame :
@@ -69,20 +88,20 @@
 //
 // MONTH_DAY_YEAR_0,MONTH_DAY_YEAR_1,MONTH_DAY_YEAR_2 quartets encoding
 //
-// MONTH_DAY_YEAR_0(3 downto 2) <= (month day high BCD digit)(1 downto 0)
-// MONTH_DAY_YEAR_0(1 downto 0) <= (month day low BCD digit) (3 downto 2)
-// MONTH_DAY_YEAR_1(3 downto 2) <= (month day low BCD digit) (1 downto 0)
-// MONTH_DAY_YEAR_1(1 downto 0) <= (year - 2000)(5 downto 4)
-// MONTH_DAY_YEAR_2             <= (year - 2000)(3 downto 0)
+//    MONTH_DAY_YEAR_0(3 downto 2) <= (month day high BCD digit)(1 downto 0)
+//    MONTH_DAY_YEAR_0(1 downto 0) <= (month day low BCD digit) (3 downto 2)
+//    MONTH_DAY_YEAR_1(3 downto 2) <= (month day low BCD digit) (1 downto 0)
+//    MONTH_DAY_YEAR_1(1 downto 0) <= (year - 2000)(5 downto 4)
+//    MONTH_DAY_YEAR_2             <= (year - 2000)(3 downto 0)
 //
 // LOW_CHECKSUM quartet encoding :
 //
-// LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [0xF] to [MONTH_DAY_YEAR_2])
+//    LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [0xF] to [MONTH_DAY_YEAR_2])
 //
 // -------------------------------------------------------------------------------
 // Forecasts frame
 //
-// | Header (6 quartets) | n+0 day_forcast (15 quartets) | n+1 day_forcast (15 quartets) | ... | n+5 day_forcast (15 quartets) | Probability of rain frame (if TYPE==0x0) |
+//    | Header (6 quartets) | n+0 day_forcast (15 quartets) | n+1 day_forcast (15 quartets) | ... | n+5 day_forcast (15 quartets) | Probability of rain frame (if TYPE==0x0) |
 //
 // ----
 //
@@ -115,7 +134,6 @@
 //    [LOW_TEMP_HIGH_BCD][LOW_TEMP_LOW_BCD][HIGH_TEMP_HIGH_BCD][HIGH_TEMP_LOW_BCD] ...
 //    [PICTO_CODE_HIGH_0][PICTO_CODE_LOW_0][PICTO_CODE_HIGH_1][PICTO_CODE_LOW_1][PICTO_CODE_HIGH_2][PICTO_CODE_LOW_2][PICTO_CODE_HIGH_3][PICTO_CODE_LOW_3][PICTO_CODE_HIGH_4][PICTO_CODE_LOW_5][LOW_CHECKSUM]
 //
-//
 // LOW_TEMP_HIGH_BCD encoding :
 //
 //    LOW_TEMP_HIGH_BCD <= (temperature + 40) high BCD digit
@@ -132,6 +150,12 @@
 // PICTO_CODE_LOW_X encoding :
 //
 //    PICTO_CODE_LOW_X <= picto_id(3 downto 0)
+//
+// LOW_CHECKSUM quartet encoding :
+//
+//    LOW_CHECKSUM <= 0x7 + sum of all previous quartets (from quartet [LOW_TEMP_HIGH_BCD] to [PICTO_CODE_LOW_5])
+//
+// ----
 
 #include <errno.h>
 #include <stdio.h>

@@ -108,7 +108,7 @@
 //
 // Warning : Most of the data in this frame/block are not aligned to the quartets.
 //
-// [0x0][0x0][0x0]<TRANSMISSIONS_INTERVAL (5 bits)><NUMBER_OF_AREAS (5bits)><AREAS_ID_LIST (NUMBER_OF_AREAS*7 Bits)>[RFU][HIGH_CHECKSUM][LOW_CHECKSUM][0][0]
+// [0x0][0x0][0x0]<TRANSMISSIONS_INTERVAL (5 bits)><NUMBER_OF_AREAS (5 bits)><AREAS_ID_LIST (NUMBER_OF_AREAS*7 Bits)>[RFU][HIGH_CHECKSUM][LOW_CHECKSUM][0][0]
 //
 // TRANSMISSIONS_INTERVAL encoding :
 //
@@ -154,7 +154,7 @@
 //
 // HEADER_BLOCK :
 //
-//    [TYPE][AREA_ID_HIGH][AREA_ID_LOW][0x0][0x4][LOW_CHECKSUM]
+//    [TYPE][AREA_ID_HIGH][AREA_ID_LOW][ALERT][0x4][LOW_CHECKSUM]
 //
 // TYPE encoding :
 //    0x4 : Forecast without the rain probability forecast
@@ -360,6 +360,33 @@ uint32_t get_field(unsigned char * quartets_array, int bitidx, int fieldsize, in
 	return val;
 }
 
+int set_field(unsigned char * quartets_array, int bitidx, int fieldsize, int quartets_array_size, uint32_t data)
+{
+	int j;
+	uint32_t val;
+
+	val = 0;
+	j = 0;
+	while(j<fieldsize && (bitidx >> 2) < quartets_array_size )
+	{
+		val <<= 1;
+
+		if(data >> ( (fieldsize - j) -1 ) & 1 )
+		{
+			quartets_array[bitidx >> 2] |=  (0x8 >> (bitidx&3));
+		}
+		else
+		{
+			quartets_array[bitidx >> 2] &= ~(0x8 >> (bitidx&3));
+		}
+
+		bitidx++;
+		j++;
+	}
+
+	return bitidx;
+}
+
 // Encode temperature to BCD+40
 unsigned char dectemp_to_bcd(int temp)
 {
@@ -417,6 +444,58 @@ int gen_current_time(unsigned char * quartets)
 	quartets[8] = sum & 0xF;
 
 	return 9;
+}
+
+// Generate and encode the areas ids array.
+int gen_area_ids(unsigned char * quartets)
+{
+	int i,j,bitidx;
+
+	i = 0;
+	quartets[i++] = 0x0;
+	quartets[i++] = 0x0;
+	quartets[i++] = 0x0;
+
+	bitidx = i << 2;
+
+	// 12 Minutes interval
+	bitidx = set_field(quartets, bitidx, 5, MAX_MSG_SIZE*3, 12);
+
+	// Set 8 default regions ...
+	bitidx = set_field(quartets, bitidx, 5, MAX_MSG_SIZE*3, 8);
+
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 75);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 77);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 78);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 91);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 92);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 93);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 94);
+	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 95);
+
+	// Aligment to the next quartet
+	if(bitidx&3)
+		bitidx = set_field(quartets, bitidx, (4 - (bitidx&3)), MAX_MSG_SIZE*3, 0);
+
+	i = bitidx >> 2;
+
+	quartets[i++] = 0x1; // Not sure yet about the meaning of this quartet
+
+	int sum = 0x7;
+	j = 0;
+	while(j<i)
+	{
+		sum += quartets[j];
+		j++;
+	}
+
+	quartets[i++] = (sum >> 4) & 0xF;
+	quartets[i++] = (sum     ) & 0xF;
+
+	quartets[i++] = 0x0;
+	quartets[i++] = 0x0;
+
+	return i;
 }
 
 int gen_forecast(unsigned char * quartets, char * params)
@@ -591,6 +670,11 @@ int main(int argc, char* argv[])
 		printf("Example: %s -decode ../previsions_ok/*.txt\n",argv[0]);
 		printf("Example: %s -curtime -quiet\n",argv[0]);
 		printf("Example: %s -forecast:-10,40,1,2,3,4,5 -forecast:-11,41,6,7,8,9,10 -forecast:-12,42,11,12,13,14,15 -forecast:-13,43,16,17,18,19,20 -areaid:75 -quiet\n",argv[0]);
+		printf("Example: starmeteo + rf-tools pocsag + hackrf :\n");
+		printf("         ./starmeteo -curtime -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
+		printf("Example: starmeteo + rpitx :\n");
+		printf("         ./starmeteo -quiet -curtime -rpitx | sudo pocsag -f \"466205000\" -r 1200 -t 1\n");
+
 		exit(0);
 	}
 
@@ -906,6 +990,8 @@ int main(int argc, char* argv[])
 			exit(-1);
 
 		genfrm->quartets_cnt = gen_current_time(genfrm->quartetfrm);
+		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
+
 
 		i = 0;
 		while( i < genfrm->quartets_cnt )

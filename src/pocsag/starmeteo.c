@@ -1055,7 +1055,11 @@ int main(int argc, char* argv[])
 		if(!genfrm)
 			exit(-1);
 
-		genfrm->quartetfrm[0] = 0x4;
+		if( forecast_cnt > 4 )
+			genfrm->quartetfrm[0] = 0x0;
+		else
+			genfrm->quartetfrm[0] = 0x4;
+
 		genfrm->quartetfrm[1] = (departement>>4) & 0xF;
 		genfrm->quartetfrm[2] = (departement   ) & 0xF;
 		genfrm->quartetfrm[3] = alert & 0xF;

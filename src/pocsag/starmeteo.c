@@ -516,10 +516,14 @@ int gen_forecast(unsigned char * quartets, char * params)
 	{
 		memset(tmp2,0,sizeof(tmp2));
 		strncpy(tmp2,tmp_ptr,tmp2_ptr - (char*)tmp_ptr);
-		params_dec[i++] = atoi(tmp2);
+		if(i<2)
+			params_dec[i++] = atoi(tmp2);
+		else
+			params_dec[i++] = strtol(tmp2, NULL, 16);
+
 		tmp_ptr = tmp2_ptr + 1;
 	}
-	params_dec[i] = atoi(tmp_ptr);
+	params_dec[i] = strtol(tmp2, NULL, 16);
 
 	if(i<2)
 		i = 2;
@@ -661,15 +665,16 @@ int main(int argc, char* argv[])
 		printf("%s -encode:[HEX Quartets]\n",argv[0]);
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
 		printf("%s -curtime      Generate current date/hour frame\n",argv[0]);
-		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto],[Picto_2],[Picto_3],[Picto_4],[Picto_5]\n",argv[0]);
+		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto_Hex],[Picto_2_Hex],[Picto_3_Hex],[Picto_4_Hex],[Picto_5_Hex]\n",argv[0]);
 		printf("%s -areaid:[idcode]\n",argv[0]);
+		printf("%s -alert:[alert_hex_code] (WIP)\n",argv[0]);
 		printf("%s -rpitx        rpitx output mode (RIC and function code specified at the string start)\n",argv[0]);
 		printf("%s -quiet\n",argv[0]);
 		printf("%s -verbose\n",argv[0]);
 		printf("\n");
 		printf("Example: %s -decode ../previsions_ok/*.txt\n",argv[0]);
 		printf("Example: %s -curtime -quiet\n",argv[0]);
-		printf("Example: %s -forecast:-10,40,1,2,3,4,5 -forecast:-11,41,6,7,8,9,10 -forecast:-12,42,11,12,13,14,15 -forecast:-13,43,16,17,18,19,20 -areaid:75 -quiet\n",argv[0]);
+		printf("Example: %s -forecast:-10,40,0x1,0x2,0x3,0x4,0x5 -forecast:-11,41,0x6,0x7,0x8,0x9,0xA -forecast:-12,42,0xB,0xC,0xD,0xE,0xF -forecast:-13,43,0x10,0x11,0x12,0x13,0x14 -areaid:75 -quiet\n",argv[0]);
 		printf("Example: starmeteo + rf-tools pocsag + hackrf :\n");
 		printf("         ./starmeteo -curtime -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
 		printf("Example: starmeteo + rpitx :\n");
@@ -1031,13 +1036,19 @@ int main(int argc, char* argv[])
 
 	if(forecast_cnt)
 	{
-		int departement;
+		int departement,alert;
 
 		departement = 75;
 
 		if(isOption(argc, argv,"areaid",(char*)tmp_str, NULL) )
 		{
 			departement = atoi(tmp_str);
+		}
+
+		alert = 0;
+		if(isOption(argc, argv,"alert",(char*)tmp_str, NULL) )
+		{
+			alert = strtol(tmp_str, NULL, 16);
 		}
 
 		genfrm = calloc(sizeof(frame)*1,1);
@@ -1047,7 +1058,7 @@ int main(int argc, char* argv[])
 		genfrm->quartetfrm[0] = 0x4;
 		genfrm->quartetfrm[1] = (departement>>4) & 0xF;
 		genfrm->quartetfrm[2] = (departement   ) & 0xF;
-		genfrm->quartetfrm[3] = 0x0;
+		genfrm->quartetfrm[3] = alert & 0xF;
 		genfrm->quartetfrm[4] = 0x4;
 
 		genfrm->quartetfrm[5] = 0x7;

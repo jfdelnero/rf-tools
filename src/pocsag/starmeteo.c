@@ -597,56 +597,96 @@ unsigned char dectemp_to_bcd(int temp)
 	return (((temp / 10)&0xF) << 4) | ((temp%10) & 0xF);
 }
 
-// Generate and encode current time frame.
-int gen_current_time(unsigned char * quartets)
+// Parse a date time string into a tm struct (hard coded datetime format)
+int parse_datetime(const char *str, struct tm *tm)
 {
-	int i;
-	time_t t = time(NULL);
-	struct tm tm;
+    int year, month, day;
+    int hour, min, sec;
 
-	tm = *localtime(&t);
+    if(sscanf(str,
+              "%d-%d-%d:%d:%d:%d",
+              &year,
+              &month,
+              &day,
+              &hour,
+              &min,
+              &sec) != 6)
+    {
+        return -1;
+    }
 
-	quartets[0] = 0xF;
+    memset(tm, 0, sizeof(*tm));
 
-	if( tm.tm_hour < 10)
-	{
-		quartets[1] = tm.tm_hour;
-		quartets[2] = tm.tm_min/10;
-		quartets[3] = tm.tm_min%10;
-	}
-	else
-	{
-		if( tm.tm_hour >= 10 &&  tm.tm_hour <= 19  )
-		{
-			quartets[1] = tm.tm_hour - 10;
-			quartets[2] = (tm.tm_min/10) + 10;
-			quartets[3] = tm.tm_min%10;
-		}
-		else
-		{
-			//20 <> 23
-			quartets[1] = tm.tm_hour - 10;
-			quartets[2] = (tm.tm_min/10);
-			quartets[3] = tm.tm_min%10;
-		}
-	}
+    tm->tm_year = year - 1900;
+    tm->tm_mon  = month - 1;
+    tm->tm_mday = day;
+    tm->tm_hour = hour;
+    tm->tm_min  = min;
+    tm->tm_sec  = sec;
 
-	quartets[4] =  tm.tm_mon + 1;
-	quartets[5] =  ( ((tm.tm_mday/10)&3)<<2 ) | ( (((tm.tm_mday%10)>>2)&3) );
-	quartets[6] =  ( ((tm.tm_mday%10)&3) )<<2;
-	quartets[6] |= ( ((tm.tm_year-100)>>4) & 0x3);
-	quartets[7] =  ( ((tm.tm_year-100)) & 0xF);
+    return 0;
+}
+// Generate and encode a given time frame.
+int gen_time(struct tm *tm, unsigned char *quartets)
+{
+    int i;
 
-	int sum = 0x7;
-	i = 0;
-	while(i<8)
-	{
-		sum += quartets[i];
-		i++;
-	}
-	quartets[8] = sum & 0xF;
+    quartets[0] = 0xF;
 
-	return 9;
+    if (tm->tm_hour < 10)
+    {
+        quartets[1] = tm->tm_hour;
+        quartets[2] = tm->tm_min / 10;
+        quartets[3] = tm->tm_min % 10;
+    }
+    else
+    {
+        if (tm->tm_hour >= 10 && tm->tm_hour <= 19)
+        {
+            quartets[1] = tm->tm_hour - 10;
+            quartets[2] = (tm->tm_min / 10) + 10;
+            quartets[3] = tm->tm_min % 10;
+        }
+        else
+        {
+            // 20 <> 23
+            quartets[1] = tm->tm_hour - 10;
+            quartets[2] = tm->tm_min / 10;
+            quartets[3] = tm->tm_min % 10;
+        }
+    }
+
+    quartets[4] = tm->tm_mon + 1;
+    quartets[5] = (((tm->tm_mday / 10) & 3) << 2) |
+                  ((((tm->tm_mday % 10) >> 2) & 3));
+
+    quartets[6] = (((tm->tm_mday % 10) & 3) << 2);
+    quartets[6] |= (((tm->tm_year - 100) >> 4) & 0x3);
+
+    quartets[7] = (tm->tm_year - 100) & 0xF;
+
+    int sum = 0x7;
+    i = 0;
+    while (i < 8)
+    {
+        sum += quartets[i];
+        i++;
+    }
+
+    quartets[8] = sum & 0xF;
+
+    return 9;
+}
+
+// Generate and encode current time frame.
+int gen_current_time(unsigned char *quartets)
+{
+    time_t t = time(NULL);
+    struct tm tm;
+
+    tm = *localtime(&t);
+
+    return gen_time(&tm, quartets);
 }
 
 // Generate and encode the areas ids array.
@@ -868,6 +908,7 @@ int main(int argc, char* argv[])
 		printf("%s -encode:[HEX Quartets]\n",argv[0]);
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
 		printf("%s -curtime      Generate current date/hour frame\n",argv[0]);
+		printf("%s -time:yyyy-mm-dd:hh:ii:ss         Generate date/hour frame\n",argv[0]);
 		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto_Hex],[Picto_2_Hex],[Picto_3_Hex],[Picto_4_Hex],[Picto_5_Hex]\n",argv[0]);
 		printf("%s -areaid:[idcode]\n",argv[0]);
 		printf("%s -alert:[alert_hex_code] (WIP)\n",argv[0]);
@@ -1231,7 +1272,54 @@ int main(int argc, char* argv[])
 		free(genfrm);
 	}
 
-	if(isOption(argc, argv,"curtime",(char*)tmp_str, &param_start_index) )
+
+	if(isOption(argc, argv, "time", (char*)tmp_str, &param_start_index))
+	{
+		struct tm tm;
+		if(parse_datetime(tmp_str, &tm))
+		{
+			fprintf(stderr, "Invalid date format\n");
+			exit(-1);
+		}
+		
+		// ugly duplicated code from curtime
+		
+		genfrm = calloc(sizeof(frame)*1,1);
+		if(!genfrm)
+			exit(-1);
+
+		genfrm->quartets_cnt = gen_time(&tm, genfrm->quartetfrm);
+		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
+		i = 0;
+		while( i < genfrm->quartets_cnt )
+		{
+			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+			i++;
+		}
+
+		if( rpitx_outmode )
+		{
+			// RPITX string output : Put the RIC + function code before the message
+			printf("25176D:");
+		}
+
+		int size = (genfrm->quartets_cnt*4)/6;
+		i = 0;
+		while( i < size )
+		{
+			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
+			printf("%c",genfrm->frm[i]);
+			i++;
+		}
+
+		if(!quiet)
+			printf("\n");
+
+		free(genfrm);
+		
+	}
+	
+	if(isOption(argc, argv,"curtime",NULL, &param_start_index) )
 	{
 		genfrm = calloc(sizeof(frame)*1,1);
 		if(!genfrm)

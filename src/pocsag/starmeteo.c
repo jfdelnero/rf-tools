@@ -1168,6 +1168,7 @@ int main(int argc, char* argv[])
 				}
 			}
 		}
+		free(genfrm);
 	}
 
 	if(isOption(argc, argv,"encode",(char*)tmp_str, &param_start_index) )

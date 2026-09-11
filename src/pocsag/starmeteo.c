@@ -626,8 +626,9 @@ int parse_datetime(const char *str, struct tm *tm)
 
 	return 0;
 }
+
 // Generate and encode a given time frame.
-int gen_time(struct tm *tm, unsigned char *quartets)
+int gen_time_frame(struct tm *tm, unsigned char *quartets)
 {
 	int i;
 
@@ -678,15 +679,28 @@ int gen_time(struct tm *tm, unsigned char *quartets)
 	return 9;
 }
 
-// Generate and encode current time frame.
-int gen_current_time(unsigned char *quartets)
+// Generate and encode time frame.
+int gen_time(unsigned char *quartets, char * time_str )
 {
-	time_t t = time(NULL);
+	time_t t;
 	struct tm tm;
 
-	tm = *localtime(&t);
+	if( strlen(time_str) )
+	{
+		if(parse_datetime(time_str, &tm))
+		{
+			fprintf(stderr, "Invalid date format\n");
+			return 0;
+		}
+	}
+	else
+	{
+		// Current time
+		t = time(NULL);
+		tm = *localtime(&t);
+	}
 
-	return gen_time(&tm, quartets);
+	return gen_time_frame(&tm, quartets);
 }
 
 // Generate and encode the areas ids array.
@@ -907,7 +921,7 @@ int main(int argc, char* argv[])
 		printf("%s -decode [files]\n",argv[0]);
 		printf("%s -encode:[HEX Quartets]\n",argv[0]);
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
-		printf("%s -curtime      Generate current date/hour frame\n",argv[0]);
+		printf("%s -time          Generate current date/hour frame\n",argv[0]);
 		printf("%s -time:yyyy-mm-dd:hh:ii:ss         Generate date/hour frame\n",argv[0]);
 		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto_Hex],[Picto_2_Hex],[Picto_3_Hex],[Picto_4_Hex],[Picto_5_Hex]\n",argv[0]);
 		printf("%s -areaid:[idcode]\n",argv[0]);
@@ -1309,87 +1323,44 @@ int main(int argc, char* argv[])
 		free(genfrm);
 	}
 
-
-	if(isOption(argc, argv, "time", (char*)tmp_str, &param_start_index))
-	{
-		struct tm tm;
-		if(parse_datetime(tmp_str, &tm))
-		{
-			fprintf(stderr, "Invalid date format\n");
-			exit(-1);
-		}
-
-		// ugly duplicated code from curtime
-
-		genfrm = calloc(sizeof(frame)*1,1);
-		if(!genfrm)
-			exit(-1);
-
-		genfrm->quartets_cnt = gen_time(&tm, genfrm->quartetfrm);
-		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
-		i = 0;
-		while( i < genfrm->quartets_cnt )
-		{
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
-			i++;
-		}
-
-		if( rpitx_outmode )
-		{
-			// RPITX string output : Put the RIC + function code before the message
-			printf("25176D:");
-		}
-
-		int size = (genfrm->quartets_cnt*4)/6;
-		i = 0;
-		while( i < size )
-		{
-			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-			printf("%c",genfrm->frm[i]);
-			i++;
-		}
-
-		if(!quiet)
-			printf("\n");
-
-		free(genfrm);
-
-	}
-
-	if(isOption(argc, argv,"curtime",NULL, &param_start_index) )
+	tmp_str[0] = '\0';
+	if( isOption(argc, argv,"curtime",NULL, &param_start_index) ||      // curtime is now deprecated.
+		isOption(argc, argv, "time", (char*)tmp_str, &param_start_index) )
 	{
 		genfrm = calloc(sizeof(frame)*1,1);
 		if(!genfrm)
 			exit(-1);
 
-		genfrm->quartets_cnt = gen_current_time(genfrm->quartetfrm);
+		genfrm->quartets_cnt = gen_time(genfrm->quartetfrm, (char*)&tmp_str);
 		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
 
-
-		i = 0;
-		while( i < genfrm->quartets_cnt )
+		if(genfrm->quartets_cnt)
 		{
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
-			i++;
-		}
+			i = 0;
+			while( i < genfrm->quartets_cnt )
+			{
+				set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+				i++;
+			}
 
-		if( rpitx_outmode )
-		{
-			// RPITX string output : Put the RIC + function code before the message
-			printf("25176D:");
-		}
+			if( rpitx_outmode )
+			{
+				// RPITX string output : Put the RIC + function code before the message
+				printf("25176D:");
+			}
 
-		int size = (genfrm->quartets_cnt*4)/6;
-		i = 0;
-		while( i < size )
-		{
-			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-			printf("%c",genfrm->frm[i]);
-			i++;
-		}
+			int size = (genfrm->quartets_cnt*4)/6;
+			i = 0;
+			while( i < size )
+			{
+				genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
+				printf("%c",genfrm->frm[i]);
+				i++;
+			}
 
-		if(!quiet)
-			printf("\n");
+			if(!quiet)
+				printf("\n");
+		}
 
 		free(genfrm);
 	}

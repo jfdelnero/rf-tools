@@ -600,93 +600,93 @@ unsigned char dectemp_to_bcd(int temp)
 // Parse a date time string into a tm struct (hard coded datetime format)
 int parse_datetime(const char *str, struct tm *tm)
 {
-    int year, month, day;
-    int hour, min, sec;
+	int year, month, day;
+	int hour, min, sec;
 
-    if(sscanf(str,
-              "%d-%d-%d:%d:%d:%d",
-              &year,
-              &month,
-              &day,
-              &hour,
-              &min,
-              &sec) != 6)
-    {
-        return -1;
-    }
+	if(sscanf(str,
+			"%d-%d-%d:%d:%d:%d",
+			&year,
+			&month,
+			&day,
+			&hour,
+			&min,
+			&sec) != 6)
+	{
+		return -1;
+	}
 
-    memset(tm, 0, sizeof(*tm));
+	memset(tm, 0, sizeof(*tm));
 
-    tm->tm_year = year - 1900;
-    tm->tm_mon  = month - 1;
-    tm->tm_mday = day;
-    tm->tm_hour = hour;
-    tm->tm_min  = min;
-    tm->tm_sec  = sec;
+	tm->tm_year = year - 1900;
+	tm->tm_mon  = month - 1;
+	tm->tm_mday = day;
+	tm->tm_hour = hour;
+	tm->tm_min  = min;
+	tm->tm_sec  = sec;
 
-    return 0;
+	return 0;
 }
 // Generate and encode a given time frame.
 int gen_time(struct tm *tm, unsigned char *quartets)
 {
-    int i;
+	int i;
 
-    quartets[0] = 0xF;
+	quartets[0] = 0xF;
 
-    if (tm->tm_hour < 10)
-    {
-        quartets[1] = tm->tm_hour;
-        quartets[2] = tm->tm_min / 10;
-        quartets[3] = tm->tm_min % 10;
-    }
-    else
-    {
-        if (tm->tm_hour >= 10 && tm->tm_hour <= 19)
-        {
-            quartets[1] = tm->tm_hour - 10;
-            quartets[2] = (tm->tm_min / 10) + 10;
-            quartets[3] = tm->tm_min % 10;
-        }
-        else
-        {
-            // 20 <> 23
-            quartets[1] = tm->tm_hour - 10;
-            quartets[2] = tm->tm_min / 10;
-            quartets[3] = tm->tm_min % 10;
-        }
-    }
+	if (tm->tm_hour < 10)
+	{
+		quartets[1] = tm->tm_hour;
+		quartets[2] = tm->tm_min / 10;
+		quartets[3] = tm->tm_min % 10;
+	}
+	else
+	{
+		if (tm->tm_hour >= 10 && tm->tm_hour <= 19)
+		{
+			quartets[1] = tm->tm_hour - 10;
+			quartets[2] = (tm->tm_min / 10) + 10;
+			quartets[3] = tm->tm_min % 10;
+		}
+		else
+		{
+			// 20 <> 23
+			quartets[1] = tm->tm_hour - 10;
+			quartets[2] = tm->tm_min / 10;
+			quartets[3] = tm->tm_min % 10;
+		}
+	}
 
-    quartets[4] = tm->tm_mon + 1;
-    quartets[5] = (((tm->tm_mday / 10) & 3) << 2) |
-                  ((((tm->tm_mday % 10) >> 2) & 3));
+	quartets[4] = tm->tm_mon + 1;
+	quartets[5] = (((tm->tm_mday / 10) & 3) << 2) |
+				  ((((tm->tm_mday % 10) >> 2) & 3));
 
-    quartets[6] = (((tm->tm_mday % 10) & 3) << 2);
-    quartets[6] |= (((tm->tm_year - 100) >> 4) & 0x3);
+	quartets[6] = (((tm->tm_mday % 10) & 3) << 2);
+	quartets[6] |= (((tm->tm_year - 100) >> 4) & 0x3);
 
-    quartets[7] = (tm->tm_year - 100) & 0xF;
+	quartets[7] = (tm->tm_year - 100) & 0xF;
 
-    int sum = 0x7;
-    i = 0;
-    while (i < 8)
-    {
-        sum += quartets[i];
-        i++;
-    }
+	int sum = 0x7;
+	i = 0;
+	while (i < 8)
+	{
+		sum += quartets[i];
+		i++;
+	}
 
-    quartets[8] = sum & 0xF;
+	quartets[8] = sum & 0xF;
 
-    return 9;
+	return 9;
 }
 
 // Generate and encode current time frame.
 int gen_current_time(unsigned char *quartets)
 {
-    time_t t = time(NULL);
-    struct tm tm;
+	time_t t = time(NULL);
+	struct tm tm;
 
-    tm = *localtime(&t);
+	tm = *localtime(&t);
 
-    return gen_time(&tm, quartets);
+	return gen_time(&tm, quartets);
 }
 
 // Generate and encode the areas ids array.
@@ -1069,6 +1069,43 @@ int main(int argc, char* argv[])
 						printf("\n");
 
 					break;
+					case 0xE:
+						// Alert
+						int cnt;
+
+						printf("Alert frame : ");
+
+						cnt = genfrm[b].quartetfrm[2];
+
+						printf("%d element(s) :\n", cnt);
+
+						i = 0;
+						while( i < cnt )
+						{
+							printf("Level:%d, Message:%d\n", genfrm[b].quartetfrm[4 + (i*3) + 1], genfrm[b].quartetfrm[4 + (i*3) + 2]);
+							i++;
+						}
+
+						sum = 0x7;
+						i = 0;
+						while( i < (4+(cnt*3)) )
+						{
+							sum += genfrm[b].quartetfrm[i];
+							i++;
+						}
+
+						if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
+						{
+							printf(" (Valid checksum)") ;
+						}
+						else
+						{
+							printf(" (Bad checksum)  ");
+						}
+
+						printf("\n");
+
+					break;
 					default:
 						// Trame prévision
 
@@ -1174,13 +1211,13 @@ int main(int argc, char* argv[])
 									printf("Rain Day N+%d : %d %c, ", i, genfrm[b].quartetfrm[idx + 2] * 5, '%' );
 									idx += 5;
 								}
-								
+
 								sum = 7;
 								for(i = str_idx; i < str_idx + 6*5;i++)
 								{
 									sum += genfrm[b].quartetfrm[i];
 								}
-								
+
 								if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
 								{
 									printf(" (Valid checksum)") ;
@@ -1281,9 +1318,9 @@ int main(int argc, char* argv[])
 			fprintf(stderr, "Invalid date format\n");
 			exit(-1);
 		}
-		
+
 		// ugly duplicated code from curtime
-		
+
 		genfrm = calloc(sizeof(frame)*1,1);
 		if(!genfrm)
 			exit(-1);
@@ -1316,9 +1353,9 @@ int main(int argc, char* argv[])
 			printf("\n");
 
 		free(genfrm);
-		
+
 	}
-	
+
 	if(isOption(argc, argv,"curtime",NULL, &param_start_index) )
 	{
 		genfrm = calloc(sizeof(frame)*1,1);

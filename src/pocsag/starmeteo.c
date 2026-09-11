@@ -888,6 +888,44 @@ int loadfrm(frame * frm, int idx, char *path)
 	return idx;
 }
 
+int generate_time(char * time_str, char * outbuf)
+{
+	int i,size;
+	frame * genfrm;
+
+	size = 0;
+	outbuf[0] = '\0';
+
+	genfrm = calloc(sizeof(frame)*1,1);
+	if(genfrm)
+	{
+		genfrm->quartets_cnt = gen_time(genfrm->quartetfrm, time_str);
+		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
+
+		if(genfrm->quartets_cnt)
+		{
+			i = 0;
+			while( i < genfrm->quartets_cnt )
+			{
+				set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+				i++;
+			}
+
+			size = (genfrm->quartets_cnt*4)/6;
+			i = 0;
+			while( i < size )
+			{
+				outbuf[i] = raw2char(genfrm->dcodefrm[i]);
+				i++;
+			}
+		}
+	}
+
+	free(genfrm);
+
+	return size;
+}
+
 int main(int argc, char* argv[])
 {
 	int i,idx,fidx;
@@ -897,6 +935,7 @@ int main(int argc, char* argv[])
 	frame * genfrm;
 	int sum;
 	char tmp_str[512];
+	char out_frame[512];
 	int forecast_cnt;
 	int prev_cnt,ck;
 
@@ -1327,42 +1366,16 @@ int main(int argc, char* argv[])
 	if( isOption(argc, argv,"curtime",NULL, &param_start_index) ||      // curtime is now deprecated.
 		isOption(argc, argv, "time", (char*)tmp_str, &param_start_index) )
 	{
-		genfrm = calloc(sizeof(frame)*1,1);
-		if(!genfrm)
-			exit(-1);
-
-		genfrm->quartets_cnt = gen_time(genfrm->quartetfrm, (char*)&tmp_str);
-		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
-
-		if(genfrm->quartets_cnt)
+		if( generate_time((char*)&tmp_str,(char*)&out_frame) )
 		{
-			i = 0;
-			while( i < genfrm->quartets_cnt )
-			{
-				set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
-				i++;
-			}
-
-			if( rpitx_outmode )
-			{
-				// RPITX string output : Put the RIC + function code before the message
+			if( rpitx_outmode ) // RPITX string output : Put the RIC + function code before the message
 				printf("25176D:");
-			}
 
-			int size = (genfrm->quartets_cnt*4)/6;
-			i = 0;
-			while( i < size )
-			{
-				genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-				printf("%c",genfrm->frm[i]);
-				i++;
-			}
+			printf("%s",out_frame);
 
 			if(!quiet)
 				printf("\n");
 		}
-
-		free(genfrm);
 	}
 
 	forecast_cnt = 0;

@@ -266,7 +266,7 @@
 
 typedef struct frame_
 {
-	unsigned char frm[MAX_MSG_SIZE];
+	char frm[MAX_MSG_SIZE];
 	unsigned char dcodefrm[MAX_MSG_SIZE];
 	unsigned char quartetfrm[MAX_MSG_SIZE*3];
 	int quartets_cnt;
@@ -514,7 +514,7 @@ unsigned char get_quartet( unsigned char * buf, int idx)
 }
 
 // Set quartet to a decoded 6 bits words array
-void set_quartet( unsigned char * buf, int idx, unsigned char q)
+void set_quartet( frame * genfrm, int idx, unsigned char q)
 {
 	int i,j,bitidx;
 
@@ -526,11 +526,11 @@ void set_quartet( unsigned char * buf, int idx, unsigned char q)
 
 		if( q & (0x8>>j) )
 		{
-			buf[i] = buf[i] | ( 0x01 << (5-(bitidx%6)));
+			genfrm->dcodefrm[i] |= ( 0x01 << (5-(bitidx%6)));
 		}
 		else
 		{
-			buf[i] = buf[i] & ~( 0x01 << (5-(bitidx%6)));
+			genfrm->dcodefrm[i] &= ~( 0x01 << (5-(bitidx%6)));
 		}
 
 		bitidx++;
@@ -540,7 +540,7 @@ void set_quartet( unsigned char * buf, int idx, unsigned char q)
 	return;
 }
 
-uint32_t get_field(unsigned char * quartets_array, int bitidx, int fieldsize, int quartets_array_size)
+uint32_t get_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array_size)
 {
 	int j;
 	uint32_t val;
@@ -551,7 +551,7 @@ uint32_t get_field(unsigned char * quartets_array, int bitidx, int fieldsize, in
 	{
 		val <<= 1;
 
-		if ( quartets_array[bitidx >> 2] & (0x8 >> (bitidx&3)) )
+		if ( genfrm->quartetfrm[bitidx >> 2] & (0x8 >> (bitidx&3)) )
 		{
 			val |= 0x1;
 		}
@@ -563,7 +563,7 @@ uint32_t get_field(unsigned char * quartets_array, int bitidx, int fieldsize, in
 	return val;
 }
 
-int set_field(unsigned char * quartets_array, int bitidx, int fieldsize, int quartets_array_size, uint32_t data)
+int set_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array_size, uint32_t data)
 {
 	int j;
 	uint32_t val;
@@ -576,11 +576,11 @@ int set_field(unsigned char * quartets_array, int bitidx, int fieldsize, int qua
 
 		if(data >> ( (fieldsize - j) -1 ) & 1 )
 		{
-			quartets_array[bitidx >> 2] |=  (0x8 >> (bitidx&3));
+			genfrm->quartetfrm[bitidx >> 2] |=  (0x8 >> (bitidx&3));
 		}
 		else
 		{
-			quartets_array[bitidx >> 2] &= ~(0x8 >> (bitidx&3));
+			genfrm->quartetfrm[bitidx >> 2] &= ~(0x8 >> (bitidx&3));
 		}
 
 		bitidx++;
@@ -595,6 +595,36 @@ unsigned char dectemp_to_bcd(int temp)
 {
 	temp += 40;
 	return (((temp / 10)&0xF) << 4) | ((temp%10) & 0xF);
+}
+
+void quartets_to_6bitswords(frame * genfrm)
+{
+	int i;
+
+	i = 0;
+	while( i < genfrm->quartets_cnt )
+	{
+		set_quartet( genfrm, i, genfrm->quartetfrm[i]);
+		i++;
+	}
+}
+
+int sixbitswords_to_char(frame * genfrm)
+{
+	int i,size;
+
+	size = (genfrm->quartets_cnt*4)/6;
+
+	i = 0;
+	while( i < size )
+	{
+		genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
+		i++;
+	}
+
+	genfrm->frm[i] = '\0';
+
+	return i;
 }
 
 // Parse a date time string into a tm struct (hard coded datetime format)
@@ -628,59 +658,63 @@ int parse_datetime(const char *str, struct tm *tm)
 }
 
 // Generate and encode a given time frame.
-int gen_time_frame(struct tm *tm, unsigned char *quartets)
+int gen_time_frame( frame * genfrm, struct tm *tm )
 {
 	int i;
 
-	quartets[0] = 0xF;
+	genfrm->quartetfrm[0] = 0xF;
 
 	if (tm->tm_hour < 10)
 	{
-		quartets[1] = tm->tm_hour;
-		quartets[2] = tm->tm_min / 10;
-		quartets[3] = tm->tm_min % 10;
+		genfrm->quartetfrm[1] = tm->tm_hour;
+		genfrm->quartetfrm[2] = tm->tm_min / 10;
+		genfrm->quartetfrm[3] = tm->tm_min % 10;
 	}
 	else
 	{
 		if (tm->tm_hour >= 10 && tm->tm_hour <= 19)
 		{
-			quartets[1] = tm->tm_hour - 10;
-			quartets[2] = (tm->tm_min / 10) + 10;
-			quartets[3] = tm->tm_min % 10;
+			genfrm->quartetfrm[1] = tm->tm_hour - 10;
+			genfrm->quartetfrm[2] = (tm->tm_min / 10) + 10;
+			genfrm->quartetfrm[3] = tm->tm_min % 10;
 		}
 		else
 		{
 			// 20 <> 23
-			quartets[1] = tm->tm_hour - 10;
-			quartets[2] = tm->tm_min / 10;
-			quartets[3] = tm->tm_min % 10;
+			genfrm->quartetfrm[1] = tm->tm_hour - 10;
+			genfrm->quartetfrm[2] = tm->tm_min / 10;
+			genfrm->quartetfrm[3] = tm->tm_min % 10;
 		}
 	}
 
-	quartets[4] = tm->tm_mon + 1;
-	quartets[5] = (((tm->tm_mday / 10) & 3) << 2) |
+	genfrm->quartetfrm[4] = tm->tm_mon + 1;
+	genfrm->quartetfrm[5] = (((tm->tm_mday / 10) & 3) << 2) |
 				  ((((tm->tm_mday % 10) >> 2) & 3));
 
-	quartets[6] = (((tm->tm_mday % 10) & 3) << 2);
-	quartets[6] |= (((tm->tm_year - 100) >> 4) & 0x3);
+	genfrm->quartetfrm[6] = (((tm->tm_mday % 10) & 3) << 2);
+	genfrm->quartetfrm[6] |= (((tm->tm_year - 100) >> 4) & 0x3);
 
-	quartets[7] = (tm->tm_year - 100) & 0xF;
+	genfrm->quartetfrm[7] = (tm->tm_year - 100) & 0xF;
 
 	int sum = 0x7;
 	i = 0;
 	while (i < 8)
 	{
-		sum += quartets[i];
+		sum += genfrm->quartetfrm[i];
 		i++;
 	}
 
-	quartets[8] = sum & 0xF;
+	genfrm->quartetfrm[8] = sum & 0xF;
 
-	return 9;
+	genfrm->quartets_cnt = 9;
+
+	quartets_to_6bitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
 }
 
 // Generate and encode time frame.
-int gen_time(unsigned char *quartets, char * time_str )
+int gen_time( frame * genfrm, char * time_str )
 {
 	time_t t;
 	struct tm tm;
@@ -700,62 +734,65 @@ int gen_time(unsigned char *quartets, char * time_str )
 		tm = *localtime(&t);
 	}
 
-	return gen_time_frame(&tm, quartets);
+	return gen_time_frame( genfrm, &tm );
 }
 
 // Generate and encode the areas ids array.
-int gen_area_ids(unsigned char * quartets)
+int gen_area_ids( frame * genfrm )
 {
 	int i,j,bitidx;
 
-	i = 0;
-	quartets[i++] = 0x0;
-	quartets[i++] = 0x0;
-	quartets[i++] = 0x0;
+	i = genfrm->quartets_cnt;
+	genfrm->quartetfrm[i++] = 0x0;
+	genfrm->quartetfrm[i++] = 0x0;
+	genfrm->quartetfrm[i++] = 0x0;
 
 	bitidx = i << 2;
 
 	// 12 Minutes interval
-	bitidx = set_field(quartets, bitidx, 5, MAX_MSG_SIZE*3, 12);
+	bitidx = set_field(genfrm, bitidx, 5, MAX_MSG_SIZE*3, 12);
 
 	// Set 8 default regions ...
-	bitidx = set_field(quartets, bitidx, 5, MAX_MSG_SIZE*3, 8);
+	bitidx = set_field(genfrm, bitidx, 5, MAX_MSG_SIZE*3, 8);
 
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 75);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 77);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 78);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 91);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 92);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 93);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 94);
-	bitidx = set_field(quartets, bitidx, 7, MAX_MSG_SIZE*3, 95);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 75);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 77);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 78);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 91);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 92);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 93);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 94);
+	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 95);
 
 	// Aligment to the next quartet
 	if(bitidx&3)
-		bitidx = set_field(quartets, bitidx, (4 - (bitidx&3)), MAX_MSG_SIZE*3, 0);
+		bitidx = set_field(genfrm, bitidx, (4 - (bitidx&3)), MAX_MSG_SIZE*3, 0);
 
 	i = bitidx >> 2;
 
-	quartets[i++] = 0x1; // Not sure yet about the meaning of this quartet
+	genfrm->quartetfrm[i++] = 0x1; // Not sure yet about the meaning of this quartet
 
 	int sum = 0x7;
-	j = 0;
+	j = genfrm->quartets_cnt;
 	while(j<i)
 	{
-		sum += quartets[j];
-		j++;
+		sum += genfrm->quartetfrm[j++];
 	}
 
-	quartets[i++] = (sum >> 4) & 0xF;
-	quartets[i++] = (sum     ) & 0xF;
+	genfrm->quartetfrm[i++] = (sum >> 4) & 0xF;
+	genfrm->quartetfrm[i++] = (sum     ) & 0xF;
 
-	quartets[i++] = 0x0;
-	quartets[i++] = 0x0;
+	genfrm->quartetfrm[i++] = 0x0;
+	genfrm->quartetfrm[i++] = 0x0;
 
-	return i;
+	genfrm->quartets_cnt = i;
+
+	quartets_to_6bitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
 }
 
-int gen_forecast(unsigned char * quartets, char * params)
+int gen_forecast(frame * genfrm, char * params)
 {
 	char *tmp_ptr,*tmp2_ptr;
 	char tmp2[512];
@@ -764,7 +801,7 @@ int gen_forecast(unsigned char * quartets, char * params)
 	int i,j;
 
 	memset(params_dec,0,sizeof(params_dec));
-
+	memset(genfrm,0,sizeof(frame));
 	// ltemp_0,htemp_0,pic_0,pic_1,pic_2,pic_3,pic_4
 
 	i = 0;
@@ -798,29 +835,33 @@ int gen_forecast(unsigned char * quartets, char * params)
 
 	// Low temp
 	b = dectemp_to_bcd(params_dec[0]);
-	quartets[0] = (b>>4);
-	quartets[1] = (b&0xF);
+	genfrm->quartetfrm[0] = (b>>4);
+	genfrm->quartetfrm[1] = (b&0xF);
 
 	// High temp
 	b = dectemp_to_bcd(params_dec[1]);
-	quartets[2] = (b>>4);
-	quartets[3] = (b&0xF);
+	genfrm->quartetfrm[2] = (b>>4);
+	genfrm->quartetfrm[3] = (b&0xF);
 
 	// Pictos
 	for(j=0;j<5;j++)
 	{
-		quartets[4+(j*2)]     = (params_dec[2 + j] >> 4);
-		quartets[4+(j*2) + 1] = (params_dec[2 + j] & 0xF);
+		genfrm->quartetfrm[4+(j*2)]     = (params_dec[2 + j] >> 4);
+		genfrm->quartetfrm[4+(j*2) + 1] = (params_dec[2 + j] & 0xF);
 	}
 
 	// Checksum
-	quartets[14] = 7;
+	genfrm->quartetfrm[14] = 7;
 	for(i=0;i<14;i++)
 	{
-		quartets[14] += quartets[i];
+		genfrm->quartetfrm[14] += genfrm->quartetfrm[i];
 	}
 
-	return 15;
+	genfrm->quartets_cnt = 15;
+
+	quartets_to_6bitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
 }
 
 // Load and decode a frame
@@ -888,68 +929,387 @@ int loadfrm(frame * frm, int idx, char *path)
 	return idx;
 }
 
-int generate_time(char * time_str, char * outbuf)
+int generate_time(frame * genfrm, char * time_str)
 {
-	int i,size;
-	frame * genfrm;
+	memset(genfrm,0,sizeof(frame));
+	genfrm->quartets_cnt = 0;
 
-	size = 0;
-	outbuf[0] = '\0';
+	gen_time( genfrm, time_str);
+	gen_area_ids( genfrm );
 
-	genfrm = calloc(sizeof(frame)*1,1);
-	if(genfrm)
+	quartets_to_6bitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
+}
+
+int generate_forecast_header(frame * genfrm, int forecast_cnt, int departement, int alert)
+{
+	int i;
+
+	if( forecast_cnt > 4 )
+		genfrm->quartetfrm[0] = 0x0;
+	else
+		genfrm->quartetfrm[0] = 0x4;
+
+	genfrm->quartetfrm[1] = (departement>>4) & 0xF;
+	genfrm->quartetfrm[2] = (departement   ) & 0xF;
+	genfrm->quartetfrm[3] = alert & 0xF;
+	genfrm->quartetfrm[4] = 0x4;
+
+	genfrm->quartetfrm[5] = 0x7;
+	for(i=0;i<5;i++)
 	{
-		genfrm->quartets_cnt = gen_time(genfrm->quartetfrm, time_str);
-		genfrm->quartets_cnt += gen_area_ids(&genfrm->quartetfrm[genfrm->quartets_cnt]);
+		genfrm->quartetfrm[5] += genfrm->quartetfrm[i];
+	}
 
-		if(genfrm->quartets_cnt)
+	genfrm->quartets_cnt = 6;
+
+	quartets_to_6bitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
+}
+
+int decode_frame(char ** filelist, int count,int verbose)
+{
+	int i, fidx;
+	int idx;
+	frame * genfrm;
+	int prev_cnt,ck;
+	int sum;
+
+	genfrm = calloc(sizeof(frame)*count,1);
+	if(!genfrm)
+		return 0;
+
+	fidx = 0;
+	i = 0;
+	while( filelist[i] )
+	{
+		printf("\nFile : %s\n",filelist[i]);
+		fidx = loadfrm(genfrm, fidx, filelist[i]);
+		i++;
+	}
+
+	printf("Frames:%d\n",fidx);
+
+	for(int b=0;b<fidx;b++)
+	{
+		if(verbose)
 		{
 			i = 0;
-			while( i < genfrm->quartets_cnt )
+			while(i<genfrm[b].quartets_cnt)
 			{
-				set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
+				//printbin( genfrm[b].quartetfrm[i],4);
+				//printf(" ");
+				printf("%X",genfrm[b].quartetfrm[i]);
 				i++;
 			}
 
-			size = (genfrm->quartets_cnt*4)/6;
-			i = 0;
-			while( i < size )
+			printf("\n");
+		}
+
+		if( genfrm[b].quartets_cnt )
+		{
+			int hour, minutes, month, day, year;
+
+			switch( genfrm[b].quartetfrm[0] )
 			{
-				outbuf[i] = raw2char(genfrm->dcodefrm[i]);
-				i++;
+				case 0xF:
+					// Trame horaire
+					printf("Date frame : ");
+					// Si champ heure < 10 : Codage BCD direct
+					if( genfrm[b].quartetfrm[1] < 10 )
+					{
+						// Si les dizaine de minutes : +10 sur les heures
+						if( genfrm[b].quartetfrm[2] >= 10 )
+						{
+							hour = genfrm[b].quartetfrm[1] + 10;
+							minutes = ((genfrm[b].quartetfrm[2]-10)*10 + genfrm[b].quartetfrm[3]) ;
+						}
+						else
+						{
+							// Sinon codage BCD direct.
+							hour = genfrm[b].quartetfrm[1];
+							minutes = (genfrm[b].quartetfrm[2]*10 + genfrm[b].quartetfrm[3]) ;
+						}
+					}
+					else
+					{
+						// Si heure >= 10
+						hour = genfrm[b].quartetfrm[1] + 10;
+						minutes = (genfrm[b].quartetfrm[2]*10 + genfrm[b].quartetfrm[3]) ;
+					}
+
+					month = genfrm[b].quartetfrm[4];
+					day = ((genfrm[b].quartetfrm[5]>>2)&3)*10 + ( ((genfrm[b].quartetfrm[5]&3)<<2) + (genfrm[b].quartetfrm[6]>>2));
+					year = 2000 + (((genfrm[b].quartetfrm[6]&3)<<4) + genfrm[b].quartetfrm[7] );
+
+					printf("%.2d:%.2d  %d/%d/%d",hour, minutes,day,month,year);
+
+					sum = 0x7;
+
+					i = 0;
+					while(i<8)
+					{
+						sum += genfrm[b].quartetfrm[i];
+						i++;
+					}
+
+					if( (sum&0xF) == genfrm[b].quartetfrm[i] )
+					{
+						printf(" (Valid checksum)") ;
+					}
+					else
+					{
+						printf(" (Bad checksum)  ");
+					}
+
+					printf(" Area codes : ");
+
+					i++;
+					idx = (i + 3) * 4;
+
+					int interval_minutes, areas_cnt, areas_id;
+
+					interval_minutes = get_field(&genfrm[b], idx, 5, MAX_MSG_SIZE*3);
+					idx += 5;
+
+					areas_cnt = get_field(&genfrm[b], idx, 5, MAX_MSG_SIZE*3);
+					idx += 5;
+
+					for(int areaidx=0;areaidx<areas_cnt;areaidx++)
+					{
+						areas_id = get_field(&genfrm[b], idx, 7, MAX_MSG_SIZE*3);
+						idx += 7;
+						printf("%d ", areas_id);
+					}
+
+					if (idx & 3)
+						idx = (idx & (~0x3)) + 0x4;
+
+					idx += 4;
+
+					printf("Interval (minutes) : %d ", interval_minutes);
+
+					sum = 0x7;
+					while(i<(idx>>2))
+					{
+						sum += genfrm[b].quartetfrm[i];
+						i++;
+					}
+
+					if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
+					{
+						printf(" (Valid checksum)") ;
+					}
+					else
+					{
+						printf(" (Bad checksum)  ");
+					}
+
+					printf("\n");
+
+				break;
+				case 0xE:
+					// Alert
+					int cnt;
+
+					printf("Alert frame : ");
+
+					cnt = genfrm[b].quartetfrm[2];
+
+					printf("%d element(s) :\n", cnt);
+
+					i = 0;
+					while( i < cnt )
+					{
+						printf("Level:%d, Message:%d\n", genfrm[b].quartetfrm[4 + (i*3) + 1], genfrm[b].quartetfrm[4 + (i*3) + 2]);
+						i++;
+					}
+
+					sum = 0x7;
+					i = 0;
+					while( i < (4+(cnt*3)) )
+					{
+						sum += genfrm[b].quartetfrm[i];
+						i++;
+					}
+
+					if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
+					{
+						printf(" (Valid checksum)") ;
+					}
+					else
+					{
+						printf(" (Bad checksum)  ");
+					}
+
+					printf("\n");
+
+				break;
+				default:
+					// Trame prévision
+
+					printf("Forecast frame - Header : ");
+
+					for(i=0;i<6;i++)
+						printf("%X",genfrm[b].quartetfrm[i]);
+
+					printf(", Area Code : %.2d", (genfrm[b].quartetfrm[1]<<4) | genfrm[b].quartetfrm[2]);
+
+					sum = 0x7;
+					i = 0;
+					while(i<5)
+					{
+						sum += genfrm[b].quartetfrm[i];
+						i++;
+					}
+
+					printf(", ");
+
+					if( (sum&0xF) == genfrm[b].quartetfrm[5] )
+					{
+						printf("Checksum : OK");
+					}
+					else
+					{
+						printf("Checksum : KO");
+					}
+					printf("\n");
+
+					prev_cnt = ( genfrm[b].quartets_cnt - ((4*6)/4) ) / ((10*6)/4);
+
+					if( prev_cnt > 6)
+						prev_cnt = 6;
+
+					idx = ((4*6)/4);
+					while( prev_cnt > 0 )
+					{
+						int lowtemp,hightemp;
+
+						printf("Frame: ");
+
+						for(i=0;i<((10*6)/4);i++)
+							printf("%X",genfrm[b].quartetfrm[idx+i]);
+
+						printf(", ");
+
+						// Checksum
+						sum = 0x7;
+						i = 0;
+						while(i<((10*6)/4)-1)
+						{
+							sum += genfrm[b].quartetfrm[idx+i];
+							i++;
+						}
+
+						if( (sum&0xF) == genfrm[b].quartetfrm[idx+i] )
+						{
+							printf("Checksum : OK, ");
+						}
+						else
+						{
+							printf("Checksum : KO, ");
+						}
+
+						// High temp : Quartet 0 :  High BCD, Quartet 1 : Low BCD
+						hightemp = (((genfrm[b].quartetfrm[idx+2])*10) + genfrm[b].quartetfrm[idx+3] ) - 40;
+						printf("High temp: %d°C, ", hightemp);
+
+						// Loq temp : Quartet 2 : High BCD, Quartet 3 : Low BCD
+						lowtemp = (((genfrm[b].quartetfrm[idx+0])*10) + genfrm[b].quartetfrm[idx+1]) - 40;
+						printf("Low temp: %d°C, ", lowtemp);
+
+						for(int t=0;t < 5 ;t++)
+						{
+							int picto = (((genfrm[b].quartetfrm[idx+4+ (t*2)])<<4) | genfrm[b].quartetfrm[idx+4+ (t*2) + 1]) & 0x3F;
+							printf("Picto %d: %d (0x%.2X), ", t, picto, picto);
+						}
+						printf("\n");
+
+						idx += ((10*6)/4);
+						prev_cnt--;
+					}
+
+					if(idx < genfrm[b].quartets_cnt)
+					{
+						ck = 0;
+						int str_idx = idx;
+						if( genfrm[b].quartetfrm[0] == 0x0 )
+						{
+							for(i=0;i<6;i++)
+							{
+								if(verbose)
+								{
+									printf("(");
+									for(int t=0;t<5;t++)
+									{
+										printf("%X",genfrm[b].quartetfrm[idx + t]);
+									}
+									printf(") ");
+								}
+
+								printf("Rain Day N+%d : %d %c, ", i, genfrm[b].quartetfrm[idx + 2] * 5, '%' );
+								idx += 5;
+							}
+
+							sum = 7;
+							for(i = str_idx; i < str_idx + 6*5;i++)
+							{
+								sum += genfrm[b].quartetfrm[i];
+							}
+
+							if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
+							{
+								printf(" (Valid checksum)") ;
+							}
+							else
+							{
+								printf(" (Bad checksum)  ");
+							}
+
+							printf("\n");
+						}
+						else
+						{
+							printf("Extra quartet(s) : ");
+							while( idx < genfrm[b].quartets_cnt )
+							{
+								printf("%X",genfrm[b].quartetfrm[idx]);
+								ck += genfrm[b].quartetfrm[idx];
+								idx++;
+							}
+							printf("\n ck:%x\n",ck);
+						}
+					}
+
+				break;
 			}
 		}
 	}
 
 	free(genfrm);
 
-	return size;
+	return 0;
 }
 
 int main(int argc, char* argv[])
 {
-	int i,idx,fidx;
+	int i;
 	int quiet,verbose;
-	int rpitx_outmode;
 	int param_start_index;
-	frame * genfrm;
-	int sum;
+	frame genfrm;
 	char tmp_str[512];
-	char out_frame[512];
 	int forecast_cnt;
-	int prev_cnt,ck;
+	char rpitx_header[32];
 
 	verbose = 0;
 	if(isOption(argc, argv,"verbose",NULL, NULL) )
-	{
 		verbose = 1;
-	}
 
 	quiet = 0;
 	if(isOption(argc, argv,"quiet",NULL, NULL) )
-	{
 		quiet = 1;
-	}
 
 	if(!quiet)
 		printf("startmeteo v0.2 -help format command line syntax.\n");
@@ -980,336 +1340,21 @@ int main(int argc, char* argv[])
 		exit(0);
 	}
 
-	rpitx_outmode = 0;
+	rpitx_header[0] = '\0';
 	if(isOption(argc, argv,"rpitx",NULL, NULL) )
-	{
-		rpitx_outmode = 1;
-	}
+		strcpy(rpitx_header,"25176D:");
 
 	param_start_index = 1;
 	if(isOption(argc, argv,"decode",NULL, &param_start_index) )
 	{
-		genfrm = calloc(sizeof(frame)*argc,1);
-		if(!genfrm)
-			exit(-1);
-
-		fidx = 0;
-		i = param_start_index + 1;
-		while( argv[i] )
-		{
-			printf("\nFile : %s\n",argv[i]);
-			fidx = loadfrm(genfrm, fidx, argv[i]);
-			i++;
-		}
-
-		printf("Frames:%d\n",fidx);
-
-		for(int b=0;b<fidx;b++)
-		{
-			if(verbose)
-			{
-				i = 0;
-				while(i<genfrm[b].quartets_cnt)
-				{
-					//printbin( genfrm[b].quartetfrm[i],4);
-					//printf(" ");
-					printf("%X",genfrm[b].quartetfrm[i]);
-					i++;
-				}
-
-				printf("\n");
-			}
-
-			if( genfrm[b].quartets_cnt )
-			{
-				int hour, minutes, month, day, year;
-
-				switch( genfrm[b].quartetfrm[0] )
-				{
-					case 0xF:
-						// Trame horaire
-						printf("Date frame : ");
-						// Si champ heure < 10 : Codage BCD direct
-						if( genfrm[b].quartetfrm[1] < 10 )
-						{
-							// Si les dizaine de minutes : +10 sur les heures
-							if( genfrm[b].quartetfrm[2] >= 10 )
-							{
-								hour = genfrm[b].quartetfrm[1] + 10;
-								minutes = ((genfrm[b].quartetfrm[2]-10)*10 + genfrm[b].quartetfrm[3]) ;
-							}
-							else
-							{
-								// Sinon codage BCD direct.
-								hour = genfrm[b].quartetfrm[1];
-								minutes = (genfrm[b].quartetfrm[2]*10 + genfrm[b].quartetfrm[3]) ;
-							}
-						}
-						else
-						{
-							// Si heure >= 10
-							hour = genfrm[b].quartetfrm[1] + 10;
-							minutes = (genfrm[b].quartetfrm[2]*10 + genfrm[b].quartetfrm[3]) ;
-						}
-
-						month = genfrm[b].quartetfrm[4];
-						day = ((genfrm[b].quartetfrm[5]>>2)&3)*10 + ( ((genfrm[b].quartetfrm[5]&3)<<2) + (genfrm[b].quartetfrm[6]>>2));
-						year = 2000 + (((genfrm[b].quartetfrm[6]&3)<<4) + genfrm[b].quartetfrm[7] );
-
-						printf("%.2d:%.2d  %d/%d/%d",hour, minutes,day,month,year);
-
-						sum = 0x7;
-
-						i = 0;
-						while(i<8)
-						{
-							sum += genfrm[b].quartetfrm[i];
-							i++;
-						}
-
-						if( (sum&0xF) == genfrm[b].quartetfrm[i] )
-						{
-							printf(" (Valid checksum)") ;
-						}
-						else
-						{
-							printf(" (Bad checksum)  ");
-						}
-
-						printf(" Area codes : ");
-
-						i++;
-						idx = (i + 3) * 4;
-
-						int interval_minutes, areas_cnt, areas_id;
-
-						interval_minutes = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 5, MAX_MSG_SIZE*3);
-						idx += 5;
-
-						areas_cnt = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 5, MAX_MSG_SIZE*3);
-						idx += 5;
-
-						for(int areaidx=0;areaidx<areas_cnt;areaidx++)
-						{
-							areas_id = get_field((unsigned char*)&genfrm[b].quartetfrm, idx, 7, MAX_MSG_SIZE*3);
-							idx += 7;
-							printf("%d ", areas_id);
-						}
-
-						if (idx & 3)
-							idx = (idx & (~0x3)) + 0x4;
-
-						idx += 4;
-
-						printf("Interval (minutes) : %d ", interval_minutes);
-
-						sum = 0x7;
-						while(i<(idx>>2))
-						{
-							sum += genfrm[b].quartetfrm[i];
-							i++;
-						}
-
-						if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
-						{
-							printf(" (Valid checksum)") ;
-						}
-						else
-						{
-							printf(" (Bad checksum)  ");
-						}
-
-						printf("\n");
-
-					break;
-					case 0xE:
-						// Alert
-						int cnt;
-
-						printf("Alert frame : ");
-
-						cnt = genfrm[b].quartetfrm[2];
-
-						printf("%d element(s) :\n", cnt);
-
-						i = 0;
-						while( i < cnt )
-						{
-							printf("Level:%d, Message:%d\n", genfrm[b].quartetfrm[4 + (i*3) + 1], genfrm[b].quartetfrm[4 + (i*3) + 2]);
-							i++;
-						}
-
-						sum = 0x7;
-						i = 0;
-						while( i < (4+(cnt*3)) )
-						{
-							sum += genfrm[b].quartetfrm[i];
-							i++;
-						}
-
-						if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
-						{
-							printf(" (Valid checksum)") ;
-						}
-						else
-						{
-							printf(" (Bad checksum)  ");
-						}
-
-						printf("\n");
-
-					break;
-					default:
-						// Trame prévision
-
-						printf("Forecast frame - Header : ");
-
-						for(i=0;i<6;i++)
-							printf("%X",genfrm[b].quartetfrm[i]);
-
-						printf(", Area Code : %.2d", (genfrm[b].quartetfrm[1]<<4) | genfrm[b].quartetfrm[2]);
-
-						sum = 0x7;
-						i = 0;
-						while(i<5)
-						{
-							sum += genfrm[b].quartetfrm[i];
-							i++;
-						}
-
-						printf(", ");
-
-						if( (sum&0xF) == genfrm[b].quartetfrm[5] )
-						{
-							printf("Checksum : OK");
-						}
-						else
-						{
-							printf("Checksum : KO");
-						}
-						printf("\n");
-
-						prev_cnt = ( genfrm[b].quartets_cnt - ((4*6)/4) ) / ((10*6)/4);
-
-						if( prev_cnt > 6)
-							prev_cnt = 6;
-
-						idx = ((4*6)/4);
-						while( prev_cnt > 0 )
-						{
-							int lowtemp,hightemp;
-
-							printf("Frame: ");
-
-							for(i=0;i<((10*6)/4);i++)
-								printf("%X",genfrm[b].quartetfrm[idx+i]);
-
-							printf(", ");
-
-							// Checksum
-							sum = 0x7;
-							i = 0;
-							while(i<((10*6)/4)-1)
-							{
-								sum += genfrm[b].quartetfrm[idx+i];
-								i++;
-							}
-
-							if( (sum&0xF) == genfrm[b].quartetfrm[idx+i] )
-							{
-								printf("Checksum : OK, ");
-							}
-							else
-							{
-								printf("Checksum : KO, ");
-							}
-
-							// High temp : Quartet 0 :  High BCD, Quartet 1 : Low BCD
-							hightemp = (((genfrm[b].quartetfrm[idx+2])*10) + genfrm[b].quartetfrm[idx+3] ) - 40;
-							printf("High temp: %d°C, ", hightemp);
-
-							// Loq temp : Quartet 2 : High BCD, Quartet 3 : Low BCD
-							lowtemp = (((genfrm[b].quartetfrm[idx+0])*10) + genfrm[b].quartetfrm[idx+1]) - 40;
-							printf("Low temp: %d°C, ", lowtemp);
-
-							for(int t=0;t < 5 ;t++)
-							{
-								int picto = (((genfrm[b].quartetfrm[idx+4+ (t*2)])<<4) | genfrm[b].quartetfrm[idx+4+ (t*2) + 1]) & 0x3F;
-								printf("Picto %d: %d (0x%.2X), ", t, picto, picto);
-							}
-							printf("\n");
-
-							idx += ((10*6)/4);
-							prev_cnt--;
-						}
-
-						if(idx < genfrm[b].quartets_cnt)
-						{
-							ck = 0;
-							int str_idx = idx;
-							if( genfrm[b].quartetfrm[0] == 0x0 )
-							{
-								for(i=0;i<6;i++)
-								{
-									if(verbose)
-									{
-										printf("(");
-										for(int t=0;t<5;t++)
-										{
-											printf("%X",genfrm[b].quartetfrm[idx + t]);
-										}
-										printf(") ");
-									}
-
-									printf("Rain Day N+%d : %d %c, ", i, genfrm[b].quartetfrm[idx + 2] * 5, '%' );
-									idx += 5;
-								}
-
-								sum = 7;
-								for(i = str_idx; i < str_idx + 6*5;i++)
-								{
-									sum += genfrm[b].quartetfrm[i];
-								}
-
-								if( (sum&0xFF) == ( (genfrm[b].quartetfrm[i]<<4) | genfrm[b].quartetfrm[i+1] ) )
-								{
-									printf(" (Valid checksum)") ;
-								}
-								else
-								{
-									printf(" (Bad checksum)  ");
-								}
-
-								printf("\n");
-							}
-							else
-							{
-								printf("Extra quartet(s) : ");
-								while( idx < genfrm[b].quartets_cnt )
-								{
-									printf("%X",genfrm[b].quartetfrm[idx]);
-									ck += genfrm[b].quartetfrm[idx];
-									idx++;
-								}
-								printf("\n ck:%x\n",ck);
-							}
-						}
-
-					break;
-				}
-			}
-		}
-		free(genfrm);
+		decode_frame(&argv[param_start_index + 1], argc, verbose);
 	}
 
 	if(isOption(argc, argv,"encode",(char*)tmp_str, &param_start_index) )
 	{
 		unsigned char q;
-		int size;
 
-		genfrm = calloc(sizeof(frame)*1,1);
-		if(!genfrm)
-			exit(-1);
+		memset(&genfrm,0,sizeof(frame));
 
 		i = 0;
 		while( tmp_str[i] )
@@ -1324,54 +1369,44 @@ int main(int argc, char* argv[])
 				q = (tmp_str[i] - '0');
 			else printf("Error : Invalid quartet:%c\n",tmp_str[i]);
 
-			genfrm->quartetfrm[i] = q;
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, q);
+			genfrm.quartetfrm[i] = q;
+			set_quartet( &genfrm, i, q);
 
 			i++;
 		}
 
-		genfrm->quartets_cnt = i;
+		genfrm.quartets_cnt = i;
 
-		if( isOption(argc, argv,"checksum",NULL, NULL) && genfrm->quartets_cnt )
+		if( isOption(argc, argv,"checksum",NULL, NULL) && genfrm.quartets_cnt )
 		{
 			int sum;
 
 			sum = 0x7;
 
-			for(i = 0;i < genfrm->quartets_cnt - 1; i++ )
+			for(i = 0;i < genfrm.quartets_cnt - 1; i++ )
 			{
-				sum = (sum + genfrm->quartetfrm[i]) & 0xF;
+				sum = (sum + genfrm.quartetfrm[i]) & 0xF;
 			}
 
-			genfrm->quartetfrm[genfrm->quartets_cnt - 1] = sum;
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), genfrm->quartets_cnt - 1, sum);
+			genfrm.quartetfrm[genfrm.quartets_cnt - 1] = sum;
+			set_quartet( &genfrm, genfrm.quartets_cnt - 1, sum);
 		}
 
-		size = (genfrm->quartets_cnt*4)/6;
-		i = 0;
-		while( i < size )
-		{
-			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-			printf("%c",genfrm->frm[i]);
-			i++;
-		}
+		sixbitswords_to_char(&genfrm);
+
+		printf("%s",(char*)&genfrm.frm);
 
 		if(!quiet)
 			printf("\n");
-
-		free(genfrm);
 	}
 
 	tmp_str[0] = '\0';
 	if( isOption(argc, argv,"curtime",NULL, &param_start_index) ||      // curtime is now deprecated.
 		isOption(argc, argv, "time", (char*)tmp_str, &param_start_index) )
 	{
-		if( generate_time((char*)&tmp_str,(char*)&out_frame) )
+		if( generate_time(&genfrm, (char*)&tmp_str) )
 		{
-			if( rpitx_outmode ) // RPITX string output : Put the RIC + function code before the message
-				printf("25176D:");
-
-			printf("%s",out_frame);
+			printf("%s%s", (char*)&rpitx_header, (char*)&genfrm.frm);
 
 			if(!quiet)
 				printf("\n");
@@ -1393,95 +1428,29 @@ int main(int argc, char* argv[])
 		departement = 75;
 
 		if(isOption(argc, argv,"areaid",(char*)tmp_str, NULL) )
-		{
 			departement = atoi(tmp_str);
-		}
 
 		alert = 0;
 		if(isOption(argc, argv,"alert",(char*)tmp_str, NULL) )
-		{
 			alert = strtol(tmp_str, NULL, 16);
-		}
 
-		genfrm = calloc(sizeof(frame)*1,1);
-		if(!genfrm)
-			exit(-1);
+		generate_forecast_header(&genfrm, forecast_cnt, departement, alert);
 
-		if( forecast_cnt > 4 )
-			genfrm->quartetfrm[0] = 0x0;
-		else
-			genfrm->quartetfrm[0] = 0x4;
-
-		genfrm->quartetfrm[1] = (departement>>4) & 0xF;
-		genfrm->quartetfrm[2] = (departement   ) & 0xF;
-		genfrm->quartetfrm[3] = alert & 0xF;
-		genfrm->quartetfrm[4] = 0x4;
-
-		genfrm->quartetfrm[5] = 0x7;
-		for(i=0;i<5;i++)
-		{
-			genfrm->quartetfrm[5] += genfrm->quartetfrm[i];
-		}
-
-		genfrm->quartets_cnt = 6;
-
-		i = 0;
-		while( i < genfrm->quartets_cnt )
-		{
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
-			i++;
-		}
-
-		if( rpitx_outmode )
-		{
-			// RPITX string output : Put the RIC + function code before the message
-			printf("25176D:");
-		}
-
-		int size = (genfrm->quartets_cnt*4)/6;
-		i = 0;
-		while( i < size )
-		{
-			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-			printf("%c",genfrm->frm[i]);
-			i++;
-		}
+		printf("%s%s", (char*)&rpitx_header, (char*)&genfrm.frm);
 
 		if(!quiet)
 			printf("\n");
-
-		free(genfrm);
 	}
 
 	param_start_index = 0;
 	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
 	{
-		genfrm = calloc(sizeof(frame)*1,1);
-		if(!genfrm)
-			exit(-1);
+		genfrm.quartets_cnt = gen_forecast( &genfrm,tmp_str);
 
-		genfrm->quartets_cnt = gen_forecast(genfrm->quartetfrm,tmp_str);
-
-		i = 0;
-		while( i < genfrm->quartets_cnt )
-		{
-			set_quartet( (unsigned char*)(genfrm->dcodefrm), i, genfrm->quartetfrm[i]);
-			i++;
-		}
-
-		int size = (genfrm->quartets_cnt*4)/6;
-		i = 0;
-		while( i < size )
-		{
-			genfrm->frm[i] = raw2char(genfrm->dcodefrm[i]);
-			printf("%c",genfrm->frm[i]);
-			i++;
-		}
+		printf("%s", (char*)&genfrm.frm);
 
 		if(!quiet)
 			printf("\n");
-
-		free(genfrm);
 
 		param_start_index++;
 	}

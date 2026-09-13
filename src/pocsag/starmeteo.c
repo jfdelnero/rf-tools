@@ -1354,12 +1354,12 @@ int main(int argc, char* argv[])
 		printf("%s -verbose\n",argv[0]);
 		printf("\n");
 		printf("Example: %s -decode ../previsions_ok/*.txt\n",argv[0]);
-		printf("Example: %s -curtime -quiet\n",argv[0]);
+		printf("Example: %s -time -quiet\n",argv[0]);
 		printf("Example: %s -forecast:-10,40,0x1,0x2,0x3,0x4,0x5 -forecast:-11,41,0x6,0x7,0x8,0x9,0xA -forecast:-12,42,0xB,0xC,0xD,0xE,0xF -forecast:-13,43,0x10,0x11,0x12,0x13,0x14 -areaid:75 -quiet\n",argv[0]);
 		printf("Example: starmeteo + rf-tools pocsag + hackrf :\n");
-		printf("         ./starmeteo -curtime -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
+		printf("         ./starmeteo -time -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
 		printf("Example: starmeteo + rpitx :\n");
-		printf("         ./starmeteo -quiet -curtime -rpitx | sudo pocsag -f \"466205000\" -r 1200 -t 1\n");
+		printf("         ./starmeteo -quiet -time -rpitx | sudo pocsag -f \"466205000\" -r 1200 -t 1\n");
 
 		exit(0);
 	}

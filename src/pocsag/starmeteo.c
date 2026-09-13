@@ -248,16 +248,10 @@
 //
 // ----
 
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdarg.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <time.h>
-
 #include <stdint.h>
 
 #include "cmd_param.h"
@@ -437,54 +431,16 @@ const alert_message alert_msgs[]=
 	{0x18,3,"ATTENTION, GRAND FROID, PLUIE INONDATIONS ET AVALANCHES"}
 };
 
+//////////////////////////////////////////////////////////////////////
+// Utils / helper functions
+//////////////////////////////////////////////////////////////////////
+
 void printbin(uint32_t val,int bitcnt)
 {
 	for(int j=(bitcnt-1);j>=0;j--)
 	{
 		printf("%d", (val>>j)&1);
 	}
-}
-
-// Convert pocsag characters to 6 bits raw word (decoding)
-unsigned char char2raw(unsigned char c)
-{
-	if( c >= 'k' && c <= 'o')
-		return 59+(c-'k');
-
-	switch( c )
-	{
-		case 'p':
-			return 0x20;
-		break;
-		case 's':
-			return 0x03;
-		break;
-	}
-
-	c = c - 0x20;
-
-	return c;
-}
-
-// Convert 6 bits word to char. (encoding)
-unsigned char raw2char(unsigned char r)
-{
-	if( r >= 59 && r <= 63 )
-		return 'k' + (r - 59);
-
-	switch( r )
-	{
-		case 0x20:
-			return 'p';
-		break;
-		case 0x03:
-			return 's';
-		break;
-	}
-
-	r = r + 0x20;
-
-	return r;
 }
 
 // Get quartet from a decoded 6 bits words array
@@ -540,6 +496,7 @@ void set_quartet( frame * genfrm, int idx, unsigned char q)
 	return;
 }
 
+// Get arbitrary bit-sized data from the quartets array
 uint32_t get_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array_size)
 {
 	int j;
@@ -563,6 +520,7 @@ uint32_t get_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array
 	return val;
 }
 
+// Set arbitrary bit-sized data to the quartets array
 int set_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array_size, uint32_t data)
 {
 	int j;
@@ -590,14 +548,56 @@ int set_field(frame * genfrm, int bitidx, int fieldsize, int quartets_array_size
 	return bitidx;
 }
 
-// Encode temperature to BCD+40
-unsigned char dectemp_to_bcd(int temp)
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////
+// Quartets <> ascii conversion functions
+//////////////////////////////////////////////////////////////////////
+
+// Convert pocsag characters to 6 bits raw word (decoding)
+unsigned char char2raw(unsigned char c)
 {
-	temp += 40;
-	return (((temp / 10)&0xF) << 4) | ((temp%10) & 0xF);
+	if( c >= 'k' && c <= 'o')
+		return 59+(c-'k');
+
+	switch( c )
+	{
+		case 'p':
+			return 0x20;
+		break;
+		case 's':
+			return 0x03;
+		break;
+	}
+
+	c = c - 0x20;
+
+	return c;
 }
 
-void quartets_to_6bitswords(frame * genfrm)
+// Convert 6 bits word to char. (encoding)
+unsigned char raw2char(unsigned char r)
+{
+	if( r >= 59 && r <= 63 )
+		return 'k' + (r - 59);
+
+	switch( r )
+	{
+		case 0x20:
+			return 'p';
+		break;
+		case 0x03:
+			return 's';
+		break;
+	}
+
+	r = r + 0x20;
+
+	return r;
+}
+
+void quartets_to_sixbitswords(frame * genfrm)
 {
 	int i;
 
@@ -626,6 +626,10 @@ int sixbitswords_to_char(frame * genfrm)
 
 	return i;
 }
+
+//////////////////////////////////////////////////////////////////////
+// Time and areas generator related functions
+//////////////////////////////////////////////////////////////////////
 
 // Parse a date time string into a tm struct (hard coded datetime format)
 int parse_datetime(const char *str, struct tm *tm)
@@ -708,7 +712,7 @@ int gen_time_frame( frame * genfrm, struct tm *tm )
 
 	genfrm->quartets_cnt = 9;
 
-	quartets_to_6bitswords(genfrm);
+	quartets_to_sixbitswords(genfrm);
 
 	return sixbitswords_to_char(genfrm);
 }
@@ -787,7 +791,60 @@ int gen_area_ids( frame * genfrm )
 
 	genfrm->quartets_cnt = i;
 
-	quartets_to_6bitswords(genfrm);
+	quartets_to_sixbitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
+}
+
+int generate_time(frame * genfrm, char * time_str)
+{
+	memset(genfrm,0,sizeof(frame));
+	genfrm->quartets_cnt = 0;
+
+	gen_time( genfrm, time_str);
+	gen_area_ids( genfrm );
+
+	quartets_to_sixbitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
+}
+
+//////////////////////////////////////////////////////////////////////
+// Forecasts generator related functions
+//////////////////////////////////////////////////////////////////////
+
+// Encode temperature to BCD+40
+static unsigned char dectemp_to_bcd(int temp)
+{
+	temp += 40;
+	return (((temp / 10)&0xF) << 4) | ((temp%10) & 0xF);
+}
+
+int generate_forecast_header(frame * genfrm, int forecast_cnt, int departement, int alert)
+{
+	int i;
+
+	memset(genfrm,0, sizeof(frame));
+
+	if( forecast_cnt > 4 )
+		genfrm->quartetfrm[0] = 0x0;
+	else
+		genfrm->quartetfrm[0] = 0x4;
+
+	genfrm->quartetfrm[1] = (departement>>4) & 0xF;
+	genfrm->quartetfrm[2] = (departement   ) & 0xF;
+	genfrm->quartetfrm[3] = alert & 0xF;
+	genfrm->quartetfrm[4] = 0x4;
+
+	genfrm->quartetfrm[5] = 0x7;
+	for(i=0;i<5;i++)
+	{
+		genfrm->quartetfrm[5] += genfrm->quartetfrm[i];
+	}
+
+	genfrm->quartets_cnt = 6;
+
+	quartets_to_sixbitswords(genfrm);
 
 	return sixbitswords_to_char(genfrm);
 }
@@ -859,10 +916,14 @@ int gen_forecast(frame * genfrm, char * params)
 
 	genfrm->quartets_cnt = 15;
 
-	quartets_to_6bitswords(genfrm);
+	quartets_to_sixbitswords(genfrm);
 
 	return sixbitswords_to_char(genfrm);
 }
+
+//////////////////////////////////////////////////////////////////////
+// Frames decoder related functions
+//////////////////////////////////////////////////////////////////////
 
 // Load and decode a frame
 int loadfrm(frame * frm, int idx, char *path)
@@ -927,46 +988,6 @@ int loadfrm(frame * frm, int idx, char *path)
 	}
 
 	return idx;
-}
-
-int generate_time(frame * genfrm, char * time_str)
-{
-	memset(genfrm,0,sizeof(frame));
-	genfrm->quartets_cnt = 0;
-
-	gen_time( genfrm, time_str);
-	gen_area_ids( genfrm );
-
-	quartets_to_6bitswords(genfrm);
-
-	return sixbitswords_to_char(genfrm);
-}
-
-int generate_forecast_header(frame * genfrm, int forecast_cnt, int departement, int alert)
-{
-	int i;
-
-	if( forecast_cnt > 4 )
-		genfrm->quartetfrm[0] = 0x0;
-	else
-		genfrm->quartetfrm[0] = 0x4;
-
-	genfrm->quartetfrm[1] = (departement>>4) & 0xF;
-	genfrm->quartetfrm[2] = (departement   ) & 0xF;
-	genfrm->quartetfrm[3] = alert & 0xF;
-	genfrm->quartetfrm[4] = 0x4;
-
-	genfrm->quartetfrm[5] = 0x7;
-	for(i=0;i<5;i++)
-	{
-		genfrm->quartetfrm[5] += genfrm->quartetfrm[i];
-	}
-
-	genfrm->quartets_cnt = 6;
-
-	quartets_to_6bitswords(genfrm);
-
-	return sixbitswords_to_char(genfrm);
 }
 
 int decode_frame(char ** filelist, int count,int verbose)
@@ -1293,26 +1314,29 @@ int decode_frame(char ** filelist, int count,int verbose)
 	return 0;
 }
 
+//////////////////////////////////////////////////////////////////////
+// Main
+//////////////////////////////////////////////////////////////////////
+
 int main(int argc, char* argv[])
 {
-	int i;
 	int quiet,verbose;
 	int param_start_index;
 	frame genfrm;
 	char tmp_str[512];
-	int forecast_cnt;
 	char rpitx_header[32];
 
 	verbose = 0;
 	if(isOption(argc, argv,"verbose",NULL, NULL) )
 		verbose = 1;
 
+	// Quiet mode, used to pipe the output to the rf-tools pocsag or rpitx
 	quiet = 0;
 	if(isOption(argc, argv,"quiet",NULL, NULL) )
 		quiet = 1;
 
 	if(!quiet)
-		printf("startmeteo v0.2 -help format command line syntax.\n");
+		printf("startmeteo v0.5 -help format command line syntax.\n");
 
 	if(isOption(argc, argv,"help",NULL, NULL) )
 	{
@@ -1340,19 +1364,24 @@ int main(int argc, char* argv[])
 		exit(0);
 	}
 
+	// Set the RPi TX header, if requested.
 	rpitx_header[0] = '\0';
 	if(isOption(argc, argv,"rpitx",NULL, NULL) )
 		strcpy(rpitx_header,"25176D:");
 
+	// Frame decoder
 	param_start_index = 1;
 	if(isOption(argc, argv,"decode",NULL, &param_start_index) )
 	{
 		decode_frame(&argv[param_start_index + 1], argc, verbose);
 	}
 
+	// Frame encoder (experimental)
 	if(isOption(argc, argv,"encode",(char*)tmp_str, &param_start_index) )
 	{
+		// experimental frame encoder
 		unsigned char q;
+		int i;
 
 		memset(&genfrm,0,sizeof(frame));
 
@@ -1400,6 +1429,10 @@ int main(int argc, char* argv[])
 			printf("\n");
 	}
 
+	//////////////////////////////////////////////////////////////////////
+	// Time + Areas transmission
+	//////////////////////////////////////////////////////////////////////
+
 	tmp_str[0] = '\0';
 	if( isOption(argc, argv,"curtime",NULL, &param_start_index) ||      // curtime is now deprecated.
 		isOption(argc, argv, "time", (char*)tmp_str, &param_start_index) )
@@ -1413,7 +1446,12 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	forecast_cnt = 0;
+	//////////////////////////////////////////////////////////////////////
+	// Forecast transmission
+	//////////////////////////////////////////////////////////////////////
+
+	// Count the number of forecast specified in the parameters.
+	int forecast_cnt = 0;
 	param_start_index = 0;
 	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
 	{
@@ -1425,6 +1463,7 @@ int main(int argc, char* argv[])
 	{
 		int departement,alert;
 
+		// Get all parameters
 		departement = 75;
 
 		if(isOption(argc, argv,"areaid",(char*)tmp_str, NULL) )
@@ -1434,24 +1473,26 @@ int main(int argc, char* argv[])
 		if(isOption(argc, argv,"alert",(char*)tmp_str, NULL) )
 			alert = strtol(tmp_str, NULL, 16);
 
+		// Generate and send the forecast header
 		generate_forecast_header(&genfrm, forecast_cnt, departement, alert);
 
 		printf("%s%s", (char*)&rpitx_header, (char*)&genfrm.frm);
 
 		if(!quiet)
 			printf("\n");
-	}
 
-	param_start_index = 0;
-	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
-	{
-		genfrm.quartets_cnt = gen_forecast( &genfrm,tmp_str);
+		// Then generate all forecast(s) frame/block.
+		param_start_index = 0;
+		while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index) )
+		{
+			genfrm.quartets_cnt = gen_forecast( &genfrm,tmp_str);
 
-		printf("%s", (char*)&genfrm.frm);
+			printf("%s", (char*)&genfrm.frm);
 
-		if(!quiet)
-			printf("\n");
+			if(!quiet)
+				printf("\n");
 
-		param_start_index++;
+			param_start_index++;
+		}
 	}
 }

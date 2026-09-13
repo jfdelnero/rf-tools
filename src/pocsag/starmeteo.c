@@ -742,9 +742,42 @@ int gen_time( frame * genfrm, char * time_str )
 }
 
 // Generate and encode the areas ids array.
-int gen_area_ids( frame * genfrm )
+int gen_area_ids( frame * genfrm, char * areas_str )
 {
 	int i,j,bitidx;
+	char *tmp_ptr,*tmp2_ptr;
+	char tmp2[512];
+	int params_dec[32];
+	int areas_cnt;
+
+	areas_cnt = 0;
+	params_dec[areas_cnt++] = 75;
+	params_dec[areas_cnt++] = 77;
+	params_dec[areas_cnt++] = 78;
+	params_dec[areas_cnt++] = 91;
+	params_dec[areas_cnt++] = 92;
+	params_dec[areas_cnt++] = 93;
+	params_dec[areas_cnt++] = 94;
+	params_dec[areas_cnt++] = 95;
+
+	if( strlen(areas_str) )
+	{
+		i = 0;
+		tmp_ptr = areas_str;
+		while( (tmp2_ptr = strchr(tmp_ptr,',')) && i < 32)
+		{
+			memset(tmp2,0,sizeof(tmp2));
+			strncpy(tmp2,tmp_ptr,tmp2_ptr - (char*)tmp_ptr);
+			tmp2[sizeof(tmp2)-1] = '\0';
+			params_dec[i++] = atoi(tmp2);
+			tmp_ptr = tmp2_ptr + 1;
+		}
+		strncpy(tmp2,tmp_ptr,sizeof(tmp2));
+		tmp2[sizeof(tmp2)-1] = '\0';
+		params_dec[i] = atoi(tmp2);
+
+		areas_cnt = i + 1;
+	}
 
 	i = genfrm->quartets_cnt;
 	genfrm->quartetfrm[i++] = 0x0;
@@ -757,16 +790,12 @@ int gen_area_ids( frame * genfrm )
 	bitidx = set_field(genfrm, bitidx, 5, MAX_MSG_SIZE*3, 12);
 
 	// Set 8 default regions ...
-	bitidx = set_field(genfrm, bitidx, 5, MAX_MSG_SIZE*3, 8);
+	bitidx = set_field(genfrm, bitidx, 5, MAX_MSG_SIZE*3, areas_cnt);
 
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 75);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 77);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 78);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 91);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 92);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 93);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 94);
-	bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, 95);
+	for(i=0;i<areas_cnt;i++)
+	{
+		bitidx = set_field(genfrm, bitidx, 7, MAX_MSG_SIZE*3, params_dec[i]);
+	}
 
 	// Aligment to the next quartet
 	if(bitidx&3)
@@ -796,13 +825,13 @@ int gen_area_ids( frame * genfrm )
 	return sixbitswords_to_char(genfrm);
 }
 
-int generate_time(frame * genfrm, char * time_str)
+int generate_time(frame * genfrm, char * time_str, char * areas_str)
 {
 	memset(genfrm,0,sizeof(frame));
 	genfrm->quartets_cnt = 0;
 
-	gen_time( genfrm, time_str);
-	gen_area_ids( genfrm );
+	gen_time( genfrm, time_str );
+	gen_area_ids( genfrm, areas_str );
 
 	quartets_to_sixbitswords(genfrm);
 
@@ -1336,7 +1365,7 @@ int main(int argc, char* argv[])
 		quiet = 1;
 
 	if(!quiet)
-		printf("startmeteo v0.5 -help format command line syntax.\n");
+		printf("startmeteo v0.6 -help format command line syntax.\n");
 
 	if(isOption(argc, argv,"help",NULL, NULL) )
 	{
@@ -1346,6 +1375,7 @@ int main(int argc, char* argv[])
 		printf("%s -checksum     (Update checksum with \"-encode\")\n",argv[0]);
 		printf("%s -time          Generate current date/hour frame\n",argv[0]);
 		printf("%s -time:yyyy-mm-dd:hh:ii:ss         Generate date/hour frame\n",argv[0]);
+		printf("%s -areas:[areaid_1,areaid_2,areaid_3,...]      Change the default areas list (to be used with -time)\n",argv[0]);
 		printf("%s -forecast:[LowTemp],[HighTemp],[MainPicto_Hex],[Picto_2_Hex],[Picto_3_Hex],[Picto_4_Hex],[Picto_5_Hex]\n",argv[0]);
 		printf("%s -areaid:[idcode]\n",argv[0]);
 		printf("%s -alert:[alert_hex_code] (WIP)\n",argv[0]);
@@ -1355,6 +1385,7 @@ int main(int argc, char* argv[])
 		printf("\n");
 		printf("Example: %s -decode ../previsions_ok/*.txt\n",argv[0]);
 		printf("Example: %s -time -quiet\n",argv[0]);
+		printf("Example: %s -time -areas:75,78,94,95,60 -quiet\n",argv[0]);
 		printf("Example: %s -forecast:-10,40,0x1,0x2,0x3,0x4,0x5 -forecast:-11,41,0x6,0x7,0x8,0x9,0xA -forecast:-12,42,0xB,0xC,0xD,0xE,0xF -forecast:-13,43,0x10,0x11,0x12,0x13,0x14 -areaid:75 -quiet\n",argv[0]);
 		printf("Example: starmeteo + rf-tools pocsag + hackrf :\n");
 		printf("         ./starmeteo -time -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
@@ -1437,7 +1468,12 @@ int main(int argc, char* argv[])
 	if( isOption(argc, argv,"curtime",NULL, &param_start_index) ||      // curtime is now deprecated.
 		isOption(argc, argv, "time", (char*)tmp_str, &param_start_index) )
 	{
-		if( generate_time(&genfrm, (char*)&tmp_str) )
+		char areas_str[512];
+
+		areas_str[0] = '\0';
+		isOption(argc, argv,"areas",(char*)areas_str, NULL);
+
+		if( generate_time(&genfrm, (char*)&tmp_str, (char*)&areas_str) )
 		{
 			printf("%s%s", (char*)&rpitx_header, (char*)&genfrm.frm);
 

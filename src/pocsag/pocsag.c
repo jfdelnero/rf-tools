@@ -242,8 +242,9 @@ unsigned char pocsag_nextbyte(poc * ctx, poc_batch * batches, int batchcnt)
 
 void init_batch(poc_batch * batch)
 {
+	int i;
 	batch->sync = BIGENDIAN_DWORD( calc_pocsag_bch(POCSAG_SYNC_CW) );
-	for(int i=0;i<16;i++)
+	for(i=0;i<16;i++)
 	{
 		batch->words[i] = BIGENDIAN_DWORD( calc_pocsag_bch(POCSAG_IDLE_CW) );
 	}

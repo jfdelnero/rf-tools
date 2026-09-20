@@ -437,7 +437,9 @@ const alert_message alert_msgs[]=
 
 void printbin(uint32_t val,int bitcnt)
 {
-	for(int j=(bitcnt-1);j>=0;j--)
+	int j;
+
+	for(j=(bitcnt-1);j>=0;j--)
 	{
 		printf("%d", (val>>j)&1);
 	}
@@ -1026,6 +1028,9 @@ int decode_frame(char ** filelist, int count,int verbose)
 	frame * genfrm;
 	int prev_cnt,ck;
 	int sum;
+	int b;
+	int areaidx;
+	int t;
 
 	genfrm = calloc(sizeof(frame)*count,1);
 	if(!genfrm)
@@ -1042,7 +1047,7 @@ int decode_frame(char ** filelist, int count,int verbose)
 
 	printf("Frames:%d\n",fidx);
 
-	for(int b=0;b<fidx;b++)
+	for(b=0;b<fidx;b++)
 	{
 		if(verbose)
 		{
@@ -1127,7 +1132,7 @@ int decode_frame(char ** filelist, int count,int verbose)
 					areas_cnt = get_field(&genfrm[b], idx, 5, MAX_MSG_SIZE*3);
 					idx += 5;
 
-					for(int areaidx=0;areaidx<areas_cnt;areaidx++)
+					for(areaidx=0;areaidx<areas_cnt;areaidx++)
 					{
 						areas_id = get_field(&genfrm[b], idx, 7, MAX_MSG_SIZE*3);
 						idx += 7;
@@ -1162,11 +1167,9 @@ int decode_frame(char ** filelist, int count,int verbose)
 				break;
 				case 0xE:
 					// Alert
-					int cnt;
-
 					printf("Alert frame : ");
 
-					cnt = genfrm[b].quartetfrm[2];
+					int cnt = genfrm[b].quartetfrm[2];
 
 					printf("%d element(s) :\n", cnt);
 
@@ -1270,7 +1273,7 @@ int decode_frame(char ** filelist, int count,int verbose)
 						lowtemp = (((genfrm[b].quartetfrm[idx+0])*10) + genfrm[b].quartetfrm[idx+1]) - 40;
 						printf("Low temp: %d°C, ", lowtemp);
 
-						for(int t=0;t < 5 ;t++)
+						for(t=0;t < 5 ;t++)
 						{
 							int picto = (((genfrm[b].quartetfrm[idx+4+ (t*2)])<<4) | genfrm[b].quartetfrm[idx+4+ (t*2) + 1]) & 0x3F;
 							printf("Picto %d: %d (0x%.2X), ", t, picto, picto);
@@ -1292,7 +1295,7 @@ int decode_frame(char ** filelist, int count,int verbose)
 								if(verbose)
 								{
 									printf("(");
-									for(int t=0;t<5;t++)
+									for(t=0;t<5;t++)
 									{
 										printf("%X",genfrm[b].quartetfrm[idx + t]);
 									}

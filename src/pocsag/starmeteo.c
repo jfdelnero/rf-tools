@@ -280,6 +280,16 @@ typedef struct forecast_picto_
 	char * message;
 }forecast_picto;
 
+typedef struct forecast_
+{
+	int low_temp;
+	int high_temp;
+	unsigned int picto_ids[5];
+	int picto_ids_cnt;
+	unsigned int extra_data[5];
+	int extra_data_cnt;
+}forecast;
+
 const forecast_picto forecast_pictos[]=
 {
 	{0x00,0x00,"ENSOLEILLE"},
@@ -430,6 +440,8 @@ const alert_message alert_msgs[]=
 	{0x18,2,"GRAND FROID, PLUIE INONDATIONS ET AVALANCHES"},
 	{0x18,3,"ATTENTION, GRAND FROID, PLUIE INONDATIONS ET AVALANCHES"}
 };
+
+const int rainpercent[]={0,5,10,20,25,30,40,50,60,70,75,80,90,95,98};
 
 //////////////////////////////////////////////////////////////////////
 // Utils / helper functions
@@ -851,6 +863,32 @@ static unsigned char dectemp_to_bcd(int temp)
 	return (((temp / 10)&0xF) << 4) | ((temp%10) & 0xF);
 }
 
+static unsigned char rainpercent_to_code(int percent)
+{
+	int i;
+
+	i = 0;
+	do
+	{
+		if( rainpercent[i] >= percent )
+		{
+			return i;
+		}
+
+		i++;
+	}while( i < (sizeof(rainpercent) / sizeof(int)) );
+
+	return 0xE;
+}
+
+static int code_to_rainpercent(unsigned char code)
+{
+	if ( code < (sizeof(rainpercent) / sizeof(int)) )
+		return rainpercent[code];
+
+	return 100;
+}
+
 int generate_forecast_header(frame * genfrm, int forecast_cnt, int departement, int alert)
 {
 	int i;
@@ -880,62 +918,124 @@ int generate_forecast_header(frame * genfrm, int forecast_cnt, int departement, 
 	return sixbitswords_to_char(genfrm);
 }
 
-int gen_forecast(frame * genfrm, char * params)
+
+void push_data(forecast * fc,int i, char * str)
+{
+	if(i<2)
+	{
+		if(i == 0)
+			fc->low_temp = atoi(str);
+		if(i == 1)
+			fc->high_temp = atoi(str);
+	}
+	else
+	{
+		if( i < (2 + 5))
+		{
+			fc->picto_ids[ fc->picto_ids_cnt ] = strtol(str, NULL, 16);
+			fc->picto_ids_cnt++;
+		}
+		else
+		{
+			if(fc->extra_data_cnt < 5)
+			{
+				fc->extra_data[ fc->extra_data_cnt ] = atoi(str);
+				fc->extra_data_cnt++;
+			}
+		}
+	}
+
+	return;
+}
+
+void parse_forecast(forecast * fc, char * str)
 {
 	char *tmp_ptr,*tmp2_ptr;
 	char tmp2[512];
-	unsigned char b;
-	int params_dec[32];
-	int i,j;
+	int i;
 
-	memset(params_dec,0,sizeof(params_dec));
-	memset(genfrm,0,sizeof(frame));
-	// ltemp_0,htemp_0,pic_0,pic_1,pic_2,pic_3,pic_4
+	memset(fc,0,sizeof(forecast));
+	for(i=0;i<5;i++)
+		fc->extra_data[i] = 100;
 
 	i = 0;
-	tmp_ptr = params;
+	tmp_ptr = str;
 	while( (tmp2_ptr = strchr(tmp_ptr,',')) && i < 16)
 	{
 		memset(tmp2,0,sizeof(tmp2));
 		strncpy(tmp2,tmp_ptr,tmp2_ptr - (char*)tmp_ptr);
-		if(i<2)
-			params_dec[i++] = atoi(tmp2);
-		else
-			params_dec[i++] = strtol(tmp2, NULL, 16);
+
+		push_data(fc, i, (char*)&tmp2);
 
 		tmp_ptr = tmp2_ptr + 1;
-	}
-	params_dec[i] = strtol(tmp2, NULL, 16);
-
-	if(i<2)
-		i = 2;
-
-	j = i;
-
-	while(i<8)
-	{
-		params_dec[i] = params_dec[j];
 		i++;
 	}
 
-	//for(int j=0;j<i;j++)
-	//  printf(">> %d\n",params_dec[j]);
+	push_data(fc, i, tmp_ptr);
+
+	if( fc->picto_ids_cnt && fc->picto_ids_cnt < 5 )
+	{
+		i = fc->picto_ids_cnt;
+		while(i<5)
+		{
+			fc->picto_ids[ i ] = fc->picto_ids[ fc->picto_ids_cnt - 1 ];
+			i++;
+		}
+		fc->picto_ids_cnt = 5;
+	}
+
+	if( fc->extra_data_cnt && fc->extra_data_cnt < 5 )
+	{
+		i = fc->extra_data_cnt;
+		while(i<5)
+		{
+			fc->extra_data[ i ] = fc->extra_data[ fc->extra_data_cnt - 1 ];
+			i++;
+		}
+		fc->extra_data_cnt = 5;
+	}
+
+#if 0
+	printf("\nLow: %d\n",fc->low_temp);
+	printf("High: %d\n",fc->high_temp);
+	printf("Pictos: ");
+	for(i=0;i<fc->picto_ids_cnt;i++)
+		printf(" 0x%.2X",fc->picto_ids[i]);
+	printf("\n");
+	printf("extra: ");
+	for(i=0;i<fc->extra_data_cnt;i++)
+		printf(" 0x%.2X",fc->extra_data[i]);
+	printf("\n");
+#endif
+
+}
+
+int gen_forecast(frame * genfrm, char * params)
+{
+	unsigned char b;
+	int i;
+	forecast fc;
+
+	memset(&fc,0,sizeof(forecast));
+	memset(genfrm,0,sizeof(frame));
+
+	parse_forecast(&fc, params);
 
 	// Low temp
-	b = dectemp_to_bcd(params_dec[0]);
+	b = dectemp_to_bcd(fc.low_temp);
 	genfrm->quartetfrm[0] = (b>>4);
 	genfrm->quartetfrm[1] = (b&0xF);
 
 	// High temp
-	b = dectemp_to_bcd(params_dec[1]);
+	b = dectemp_to_bcd(fc.high_temp);
 	genfrm->quartetfrm[2] = (b>>4);
 	genfrm->quartetfrm[3] = (b&0xF);
 
 	// Pictos
-	for(j=0;j<5;j++)
+	for(i=0;i<5;i++)
 	{
-		genfrm->quartetfrm[4+(j*2)]     = (params_dec[2 + j] >> 4);
-		genfrm->quartetfrm[4+(j*2) + 1] = (params_dec[2 + j] & 0xF);
+		genfrm->quartetfrm[4+(i*2)]     = (fc.picto_ids[i] >> 4);
+		genfrm->quartetfrm[4+(i*2) + 1] = (fc.picto_ids[i] & 0xF);
 	}
 
 	// Checksum
@@ -946,6 +1046,60 @@ int gen_forecast(frame * genfrm, char * params)
 	}
 
 	genfrm->quartets_cnt = 15;
+	quartets_to_sixbitswords(genfrm);
+
+	return sixbitswords_to_char(genfrm);
+}
+
+int gen_rainforcast(int argc, char* argv[], frame * genfrm)
+{
+	char tmp_str[512];
+	unsigned char sum;
+	int i,j,param_start_index;
+	int percent;
+	int forecast_i;
+	forecast fc[6];
+
+	memset(fc,0,sizeof(fc));
+
+	memset(genfrm,0,sizeof(frame));
+
+	param_start_index = 0;
+	forecast_i = 0;
+	while( isOption(argc, argv,"forecast",(char*)tmp_str, &param_start_index)  && forecast_i < 6 )
+	{
+		parse_forecast(&fc[forecast_i], tmp_str);
+		forecast_i++;
+		param_start_index++;
+	}
+
+	genfrm->quartets_cnt = 0;
+
+	for(i=0;i<6;i++)
+	{
+		for(j=0;j<5;j++)
+		{
+			percent = fc[i].extra_data[j];
+			if(percent < 0)
+				percent = 0;
+
+			if(percent > 100)
+				percent = 100;
+
+			genfrm->quartetfrm[genfrm->quartets_cnt++] = rainpercent_to_code(percent);
+		}
+	}
+
+	sum = 7;
+	for(i=0;i<genfrm->quartets_cnt;i++)
+	{
+	   sum += genfrm->quartetfrm[i];
+	}
+
+	genfrm->quartetfrm[genfrm->quartets_cnt++] = (sum >> 4)&0xF;
+	genfrm->quartetfrm[genfrm->quartets_cnt++] = (sum & 0xF);
+	genfrm->quartetfrm[genfrm->quartets_cnt++] = 0;
+	genfrm->quartetfrm[genfrm->quartets_cnt++] = 0xB;
 
 	quartets_to_sixbitswords(genfrm);
 
@@ -1302,7 +1456,7 @@ int decode_frame(char ** filelist, int count,int verbose)
 									printf(") ");
 								}
 
-								printf("Rain Day N+%d : %d %c, ", i, genfrm[b].quartetfrm[idx + 2] * 5, '%' );
+								printf("Rain Day N+%d : %d %c, ", i, code_to_rainpercent(genfrm[b].quartetfrm[idx + 2]), '%' );
 								idx += 5;
 							}
 
@@ -1368,7 +1522,7 @@ int main(int argc, char* argv[])
 		quiet = 1;
 
 	if(!quiet)
-		printf("startmeteo v0.6 -help format command line syntax.\n");
+		printf("startmeteo v0.8 -help format command line syntax.\n");
 
 	if(isOption(argc, argv,"help",NULL, NULL) )
 	{
@@ -1390,6 +1544,7 @@ int main(int argc, char* argv[])
 		printf("Example: %s -time -quiet\n",argv[0]);
 		printf("Example: %s -time -areas:75,78,94,95,60 -quiet\n",argv[0]);
 		printf("Example: %s -forecast:-10,40,0x1,0x2,0x3,0x4,0x5 -forecast:-11,41,0x6,0x7,0x8,0x9,0xA -forecast:-12,42,0xB,0xC,0xD,0xE,0xF -forecast:-13,43,0x10,0x11,0x12,0x13,0x14 -areaid:75 -quiet\n",argv[0]);
+		printf("Example: %s -forecast:-10,40,0x1,0x2,0x3,0x4,0x5,60 -forecast:-11,41,0x6,0x7,0x8,0x9,0xA,40 -forecast:-12,42,0xB,0xC,0xD,0xE,0xF,30 -forecast:-13,43,0x10,0x11,0x12,0x13,0x14,20 -forecast:-13,43,0x10,0x11,0x12,0x13,0x14,80 -forecast:-13,43,0x10,0x11,0x12,0x13,0x14,90 -areaid:75 -quiet\n",argv[0]);
 		printf("Example: starmeteo + rf-tools pocsag + hackrf :\n");
 		printf("         ./starmeteo -time -quiet | ./pocsag -generate -stdin_message -stdout -ric:25176 -func:3 -alpha | hackrf_transfer  -f 466206250 -t -  -x 10 -a 0 -s 2000000\n");
 		printf("Example: starmeteo + rpitx :\n");
@@ -1533,5 +1688,19 @@ int main(int argc, char* argv[])
 
 			param_start_index++;
 		}
+
+		if( forecast_cnt == 6 )
+		{
+			// generate all rain frame/block.
+
+			genfrm.quartets_cnt = gen_rainforcast(argc, argv,  &genfrm);
+
+			printf("%s", (char*)&genfrm.frm);
+
+			if(!quiet)
+				printf("\n");
+
+		}
+
 	}
 }
